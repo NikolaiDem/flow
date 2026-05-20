@@ -1,29 +1,23 @@
-
 package com.bank.flow;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
-import java.util.UUID;
+import java.util.List;
 
 public class FlowContext {
 
-    private static final ThreadLocal<Context> CTX =
-            ThreadLocal.withInitial(Context::new);
+    private static final ThreadLocal<FlowContext> TL =
+            ThreadLocal.withInitial(FlowContext::new);
 
-    public static class Context {
-        public String traceId;
-        public Deque<CallNode> stack = new ArrayDeque<>();
-    }
+    public final Deque<CallNode> stack = new ArrayDeque<>();
+    public final List<CallNode> roots = new ArrayList<>();
 
-    public static void init() {
-        CTX.get().traceId = UUID.randomUUID().toString();
-    }
-
-    public static Context get() {
-        return CTX.get();
+    public static FlowContext get() {
+        return TL.get();
     }
 
     public static void clear() {
-        CTX.remove();
+        TL.remove();
     }
 }

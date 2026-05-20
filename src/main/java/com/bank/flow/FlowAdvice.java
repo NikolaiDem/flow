@@ -1,19 +1,22 @@
-
 package com.bank.flow;
 
 import net.bytebuddy.asm.Advice;
 
+import java.lang.reflect.Method;
+
 public class FlowAdvice {
 
     @Advice.OnMethodEnter
-    public static void enter(@Advice.Origin Class<?> clazz,
-                             @Advice.Origin String method) {
+    public static void enter(@Advice.Origin Method method) {
+        CallNode node = new CallNode(
+                method.getDeclaringClass().getName(),
+                method.getName()
+        );
 
-        CallNode node = new CallNode(clazz.getName(), method);
         FlowCollector.enter(node);
     }
 
-    @Advice.OnMethodExit
+    @Advice.OnMethodExit(onThrowable = Throwable.class)
     public static void exit() {
         FlowCollector.exit();
     }

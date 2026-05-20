@@ -1,6 +1,7 @@
 
 package com.bank.flow;
 
+
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 
@@ -11,14 +12,25 @@ import static net.bytebuddy.matcher.ElementMatchers.*;
 public class FlowAgent {
 
     public static void premain(String args, Instrumentation inst) {
+        // 1. ставим shutdown hook ОДИН РАЗ
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("\n=== CALL GRAPH ===");
+
+            var roots = FlowCollector.roots();
+            System.out.println(roots);
+        }));
 
         new AgentBuilder.Default()
-                .ignore(nameStartsWith("net.bytebuddy"))
-                .type(nameStartsWith("com.bank"))
-                .transform((builder, type, loader, module, pd) ->
-                        builder.visit(Advice.to(FlowAdvice.class)
-                                .on(any()))
-                )
+                .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
+                .type(nameContains("com.example"))
+                .transform((builder, type, loader, module, pd) -> {
+
+                   // System.out.println("TRANSFORM: " + type.getName());
+
+                    return builder
+                            .method(any())
+                            .intercept(Advice.to(FlowAdvice.class));
+                })
                 .installOn(inst);
     }
 }
