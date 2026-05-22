@@ -1,5 +1,5 @@
 
-package com.bank.flow;
+package ru.dev.flow;
 
 
 import net.bytebuddy.agent.builder.AgentBuilder;

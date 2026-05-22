@@ -1,4 +1,4 @@
-package com.bank.flow;
+package ru.dev.flow;
 
 public class FlowCollector {
 

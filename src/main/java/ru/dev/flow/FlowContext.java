@@ -1,4 +1,4 @@
-package com.bank.flow;
+package ru.dev.flow;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
