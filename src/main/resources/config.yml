@@ -1,0 +1,10 @@
+stack-output: ../stack1.json
+include:
+  start-on:
+    - ru.exp
+  contains:
+    - filter
+
+exclude:
+  contains:
+    - ru.dev.flow.filters
