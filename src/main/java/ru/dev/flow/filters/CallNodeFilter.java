@@ -10,18 +10,18 @@ import static ru.dev.flow.config.FlowConfig.CONFIG;
 public class CallNodeFilter {
 
     public static boolean matches(CallNode callNode) {
-        FlowYamlConfig.Include include = CONFIG.getInclude();
-        if (include == FlowYamlConfig.Include.EMPTY) {
+        FlowYamlConfig.Match match = CONFIG.getInclude();
+        if (match == FlowYamlConfig.Match.EMPTY) {
             return false;
         }
         String className = callNode.className();
-        List<String> contains = include.getContains();
+        List<String> contains = match.getContains();
         for (var containsAny : contains) {
             if (className.contains(containsAny)) {
                 return true;
             }
         }
-        List<String> startOn = include.getStartOn();
+        List<String> startOn = match.getStartOn();
         for (var containsAny : startOn) {
             if (className.startsWith(containsAny)) {
                 return true;

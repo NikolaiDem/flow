@@ -16,14 +16,14 @@ public class FlowMatchers {
                 includeMatcher = buildMatcher(cfg.getInclude());
 
         ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-                excludeMatcher = buildMatcher(cfg.getExclude());
+                excludeMatcher = buildMatcherExclude(cfg.getExclude());
 
         // include AND NOT exclude
         return includeMatcher.and(not(excludeMatcher));
     }
 
     private static ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-    buildMatcher(FlowYamlConfig.Include cfg) {
+    buildMatcher(FlowYamlConfig.Match cfg) {
 
         // если секция пустая → any()
         if (cfg == null ||
@@ -52,7 +52,7 @@ public class FlowMatchers {
     }
 
     private static ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-    buildMatcher(FlowYamlConfig.Exclude cfg) {
+    buildMatcherExclude(FlowYamlConfig.Match cfg) {
 
         // exclude пустой → none()
         if (cfg == null ||
@@ -73,6 +73,10 @@ public class FlowMatchers {
             for (String part : cfg.getContains()) {
                 matcher = matcher.or(nameContains(part));
             }
+        }
+
+        if (cfg.isSynthetic()) {
+            matcher = matcher.or(isSynthetic());
         }
 
         return matcher;

@@ -4,6 +4,7 @@ include:
     - ru.exp
   contains:
     - filter
+  synthetic: true
 
 exclude:
   contains:

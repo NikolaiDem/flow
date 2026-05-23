@@ -87,13 +87,9 @@ def export_html(trees_by_thread, out_file="trace.html"):
 
             .children {
                 margin-left: 20px;
-                display: none;
+                display: block;
                 border-left: 1px solid #ddd;
                 padding-left: 8px;
-            }
-
-            .node.open > .children {
-                display: block;
             }
         </style>
     </head>

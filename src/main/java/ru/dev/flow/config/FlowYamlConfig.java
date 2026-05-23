@@ -15,32 +15,20 @@ public class FlowYamlConfig {
     @JsonProperty("stack-output")
     private String stackOutput;
 
-    private Include include = Include.EMPTY;
-    private Exclude exclude = Exclude.EMPTY;
+    private Match include = Match.EMPTY;
+    private Match exclude = Match.EMPTY;
 
     @Setter
     @Getter
-    public static class Include {
+    public static class Match {
 
-        public static final Include EMPTY = new Include();
+        public static final Match EMPTY = new Match();
 
         @JsonProperty("start-on")
         private List<String> startOn = List.of();
 
         private List<String> contains = List.of();
 
-    }
-
-    @Setter
-    @Getter
-    public static class Exclude {
-
-        public static final Exclude EMPTY = new Exclude();
-
-        @JsonProperty("start-on")
-        private List<String> startOn = List.of();
-
-        private List<String> contains = List.of();
-
+        private boolean synthetic = false;
     }
 }
