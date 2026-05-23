@@ -9,9 +9,31 @@ def build_tree(events):
     roots = []
 
     for e in events:
+        etype = e["type"]
+
+        # START_TEST -> создаём корень теста
+        if etype == "START_TEST":
+            test_node = {
+                "name": f'TEST.{e.get("name", "unknown")}',
+                "type": "TEST",
+                "children": [],
+                "depth": 0,
+                "ts": e.get("ts", 0)
+            }
+
+            roots.append(test_node)
+            stack = [test_node]
+            continue
+
+        # END_TEST -> закрываем тест
+        if etype == "END_TEST":
+            if stack:
+                stack.pop()
+            continue
+
         name = f'{e["className"]}.{e["methodName"]}'
 
-        if e["type"] == "ENTER":
+        if etype == "ENTER":
             node = {
                 "name": name,
                 "children": [],
@@ -21,12 +43,10 @@ def build_tree(events):
 
             if stack:
                 stack[-1]["children"].append(node)
-            else:
-                roots.append(node)
 
             stack.append(node)
 
-        else:
+        elif etype == "EXIT":
             if stack:
                 stack.pop()
 
