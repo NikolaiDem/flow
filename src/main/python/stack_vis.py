@@ -5,30 +5,29 @@ import json
 # BUILD TREE (REPLAY STACK)
 # ---------------------------
 def build_tree(events):
+    tests = []
     stack = []
-    roots = []
+    current_test = None
+    has_tests = False
 
     for e in events:
         etype = e["type"]
 
-        # START_TEST -> создаём корень теста
         if etype == "START_TEST":
-            test_node = {
+            has_tests = True
+            current_test = {
                 "name": f'TEST.{e.get("name", "unknown")}',
                 "type": "TEST",
                 "children": [],
-                "depth": 0,
                 "ts": e.get("ts", 0)
             }
-
-            roots.append(test_node)
-            stack = [test_node]
+            tests.append(current_test)
+            stack = [current_test]
             continue
 
-        # END_TEST -> закрываем тест
         if etype == "END_TEST":
-            if stack:
-                stack.pop()
+            stack = []
+            current_test = None
             continue
 
         name = f'{e["className"]}.{e["methodName"]}'
@@ -43,6 +42,19 @@ def build_tree(events):
 
             if stack:
                 stack[-1]["children"].append(node)
+            else:
+                # если тестов нет → создаём виртуальный root
+                if not has_tests:
+                    current_test = {
+                        "name": "UNTESTED_THREAD",
+                        "type": "TEST",
+                        "children": []
+                    }
+                    tests.append(current_test)
+                    stack = [current_test]
+                    stack[-1]["children"].append(node)
+                else:
+                    current_test["children"].append(node)
 
             stack.append(node)
 
@@ -50,7 +62,7 @@ def build_tree(events):
             if stack:
                 stack.pop()
 
-    return roots
+    return tests
 
 
 # ---------------------------
