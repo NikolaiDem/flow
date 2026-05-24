@@ -1,4 +1,4 @@
-stack-output: ../stack1.json
+stack-output: ../stacks
 include:
   start-on:
     - ru.exp

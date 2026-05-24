@@ -8,13 +8,25 @@ def build_tree(events):
     tests = []
     stack = []
     current_test = None
-    has_tests = False
+
+    has_tests = any(e["type"] == "START_TEST" for e in events)
+
+    # виртуальный root только если тестов нет вообще
+    if not has_tests:
+        root = {
+            "name": "THREAD",
+            "type": "THREAD",
+            "children": [],
+            "ts": events[0].get("ts", 0) if events else 0
+        }
+        tests.append(root)
+        stack = [root]
+        current_test = root
 
     for e in events:
         etype = e["type"]
 
         if etype == "START_TEST":
-            has_tests = True
             current_test = {
                 "name": f'TEST.{e.get("name", "unknown")}',
                 "type": "TEST",
@@ -42,19 +54,6 @@ def build_tree(events):
 
             if stack:
                 stack[-1]["children"].append(node)
-            else:
-                # если тестов нет → создаём виртуальный root
-                if not has_tests:
-                    current_test = {
-                        "name": "UNTESTED_THREAD",
-                        "type": "TEST",
-                        "children": []
-                    }
-                    tests.append(current_test)
-                    stack = [current_test]
-                    stack[-1]["children"].append(node)
-                else:
-                    current_test["children"].append(node)
 
             stack.append(node)
 
@@ -63,7 +62,6 @@ def build_tree(events):
                 stack.pop()
 
     return tests
-
 
 # ---------------------------
 # HTML RENDER

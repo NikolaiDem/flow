@@ -1,5 +1,6 @@
 package ru.dev.flow.stack;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,5 +19,11 @@ public class Events {
 
     public static Map<Long, Queue<CallNode>> events() {
         return eventsByThread;
+    }
+
+    public static synchronized Map<Long, Queue<CallNode>> drainedEvents() {
+        var snapshot = new HashMap<>(eventsByThread);
+        eventsByThread.clear();
+        return snapshot;
     }
 }
