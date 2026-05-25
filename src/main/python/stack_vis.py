@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+
 
 # ---------------------------
 # BUILD TREE (REPLAY STACK)
@@ -6,7 +8,6 @@ import json
 def build_tree(events):
     tests = []
     stack = []
-    current_test = None
 
     has_tests = any(e["type"] == "START_TEST" for e in events)
 
@@ -20,26 +21,24 @@ def build_tree(events):
         }
         tests.append(root)
         stack = [root]
-        current_test = root
 
     for e in events:
         etype = e["type"]
 
         if etype == "START_TEST":
-            current_test = {
+            node = {
                 "name": f'TEST.{e.get("name", "unknown")}',
                 "type": "TEST",
                 "children": [],
                 "ts": e.get("ts", 0),
                 "depth": 0
             }
-            tests.append(current_test)
-            stack = [current_test]
+            tests.append(node)
+            stack = [node]
             continue
 
         if etype == "END_TEST":
             stack = []
-            current_test = None
             continue
 
         name = f'{e["className"]}.{e["methodName"]}'
@@ -65,32 +64,11 @@ def build_tree(events):
 
 
 # ---------------------------
-# FILTER TREE (0..max_depth)
+# LOAD JSON FILE
 # ---------------------------
-def filter_tree(node, max_depth):
-    depth = node.get("depth", 0)
-
-    # cut-off rule
-    if depth > max_depth:
-        return None
-
-    filtered_children = []
-    for child in node.get("children", []):
-        f = filter_tree(child, max_depth)
-        if f is not None:
-            filtered_children.append(f)
-
-    return {
-        **node,
-        "children": filtered_children
-    }
-
-
-def filter_trees(trees, max_depth):
-    return [
-        t for tree in trees
-        if (t := filter_tree(tree, max_depth)) is not None
-    ]
+def load_json(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 # ---------------------------
@@ -111,88 +89,130 @@ def render_node(node):
     """
 
 
-def export_html(trees_by_thread, out_file="trace.html"):
+def export_html(trees_by_thread, out_file):
     html = """
-    <html>
-    <head>
-        <meta charset="utf-8"/>
+<html>
+<head>
+<meta charset="utf-8"/>
 
-        <style>
-            body {
-                font-family: monospace;
-                font-size: 13px;
-            }
+<style>
+body {
+    font-family: monospace;
+    font-size: 13px;
+}
 
-            .node {
-                margin-left: 20px;
-                cursor: pointer;
-            }
+#toolbar {
+    position: sticky;
+    top: 0;
+    background: white;
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+    z-index: 1000;
+}
 
-            .title {
-                padding: 2px;
-            }
+.node {
+    margin-left: 20px;
+}
 
-            .title:hover {
-                background: #f0f0f0;
-            }
+.title {
+    padding: 2px;
+    cursor: pointer;
+}
 
-            .children {
-                margin-left: 20px;
-                border-left: 1px solid #ddd;
-                padding-left: 8px;
-            }
-        </style>
-    </head>
+.title:hover {
+    background: #f0f0f0;
+}
 
-    <body>
+.children {
+    margin-left: 20px;
+    border-left: 1px solid #ddd;
+    padding-left: 8px;
+}
+</style>
+</head>
 
-    <div id="tree">
-    """
+<body>
+
+<div id="toolbar">
+    <h3>Trace Viewer</h3>
+
+    <label>Max depth (0..n): </label>
+    <input type="range" min="0" max="30" value="10" id="depthSlider">
+    <span id="depthVal">10</span>
+</div>
+
+<div id="tree">
+"""
 
     for thread_id, trees in trees_by_thread.items():
-        html += f"<h2>Thread {thread_id}</h2>"
+        html += f"<h2>{thread_id}</h2>"
 
         for t in trees:
             html += render_node(t)
 
     html += """
-    </div>
+</div>
 
-    <script>
-        document.querySelectorAll('.title').forEach(el => {
-            el.onclick = () => {
-                const c = el.parentElement.querySelector('.children');
-                if (c) {
-                    c.style.display = (c.style.display === 'none') ? 'block' : 'none';
-                }
-            };
-        });
-    </script>
+<script>
 
-    </body>
-    </html>
-    """
+const slider = document.getElementById("depthSlider");
+const label = document.getElementById("depthVal");
+
+function applyFilter() {
+    const maxDepth = parseInt(slider.value);
+    label.innerText = maxDepth;
+
+    document.querySelectorAll(".node").forEach(n => {
+        const d = parseInt(n.dataset.depth);
+        n.style.display = (d <= maxDepth) ? "block" : "none";
+    });
+}
+
+slider.oninput = applyFilter;
+applyFilter();
+
+</script>
+
+</body>
+</html>
+"""
 
     with open(out_file, "w", encoding="utf-8") as f:
         f.write(html)
 
 
 # ---------------------------
+# PROCESS ONE FILE
+# ---------------------------
+def process_file(json_file: Path, output_dir: Path):
+    try:
+        data = load_json(json_file)
+
+        trees_by_thread = {}
+
+        for thread_id, events in data.items():
+            trees_by_thread[thread_id] = build_tree(events)
+
+        output_file = output_dir / f"{json_file.stem}.html"
+
+        export_html(trees_by_thread, output_file)
+
+        print(f"OK: {json_file.name} -> {output_file.name}")
+
+    except Exception as e:
+        print(f"FAIL: {json_file.name}: {e}")
+
+
+# ---------------------------
 # MAIN
 # ---------------------------
 if __name__ == "__main__":
-    MAX_DEPTH = 5  # 👈 главный параметр фильтра
+    INPUT_DIR = Path("./stacks")
+    OUTPUT_DIR = Path("./html")
 
-    with open("/stack1.json") as f:
-        data = json.load(f)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    trees_by_thread = {}
+    for json_file in INPUT_DIR.glob("*.json"):
+        process_file(json_file, OUTPUT_DIR)
 
-    for thread_id, events in data.items():
-        trees = build_tree(events)
-        trees = filter_trees(trees, MAX_DEPTH)
-        trees_by_thread[thread_id] = trees
-
-    export_html(trees_by_thread, out_file="trace.html")
-
-    print("trace.html generated")
+    print("DONE")
