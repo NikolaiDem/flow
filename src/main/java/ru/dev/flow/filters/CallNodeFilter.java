@@ -10,7 +10,7 @@ import static ru.dev.flow.config.FlowConfig.CONFIG;
 public class CallNodeFilter {
 
     public static boolean matches(CallNode callNode) {
-        FlowYamlConfig.Match match = CONFIG.getInclude();
+        FlowYamlConfig.Match match = CONFIG.getType().getInclude();
         if (match == FlowYamlConfig.Match.EMPTY) {
             return false;
         }

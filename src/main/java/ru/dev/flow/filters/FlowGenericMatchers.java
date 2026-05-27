@@ -1,38 +1,31 @@
 package ru.dev.flow.filters;
 
+import net.bytebuddy.description.NamedElement;
+import net.bytebuddy.description.method.MethodDescription;
+import net.bytebuddy.description.type.TypeDescription;
 import net.bytebuddy.matcher.ElementMatcher;
 import ru.dev.flow.config.FlowYamlConfig;
 
-import java.util.List;
-
 import static net.bytebuddy.matcher.ElementMatchers.*;
+import static org.apache.commons.collections4.CollectionUtils.isEmpty;
 
-public class FlowMatchers {
+public class FlowGenericMatchers<T extends NamedElement> {
 
-    public static ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-    typeFilter(FlowYamlConfig cfg) {
-
-        ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-                includeMatcher = buildMatcher(cfg.getInclude());
-
-        ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-                excludeMatcher = buildMatcherExclude(cfg.getExclude());
-
+    public ElementMatcher.Junction<T> filter(FlowYamlConfig cfg) {
+        var includeMatcher = buildMatcher(cfg.getMethod().getInclude());
+        var excludeMatcher = buildMatcherExclude(cfg.getMethod().getExclude());
         // include AND NOT exclude
         return includeMatcher.and(not(excludeMatcher));
     }
 
-    private static ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-    buildMatcher(FlowYamlConfig.Match cfg) {
-
+    private ElementMatcher.Junction<T> buildMatcher(FlowYamlConfig.Match cfg) {
         // если секция пустая → any()
         if (cfg == null ||
                 (isEmpty(cfg.getStartOn()) && isEmpty(cfg.getContains()))) {
             return any();
         }
 
-        ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-                matcher = none();
+        ElementMatcher.Junction<T> matcher = none();
 
         // start-on → nameStartsWith
         if (!isEmpty(cfg.getStartOn())) {
@@ -51,18 +44,13 @@ public class FlowMatchers {
         return matcher;
     }
 
-    private static ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-    buildMatcherExclude(FlowYamlConfig.Match cfg) {
-
+    private ElementMatcher.Junction<T> buildMatcherExclude(FlowYamlConfig.Match cfg) {
         // exclude пустой → none()
         if (cfg == null ||
                 (isEmpty(cfg.getStartOn()) && isEmpty(cfg.getContains()))) {
             return none();
         }
-
-        ElementMatcher.Junction<? super net.bytebuddy.description.type.TypeDescription>
-                matcher = none();
-
+        ElementMatcher.Junction<T> matcher = none();
         if (!isEmpty(cfg.getStartOn())) {
             for (String prefix : cfg.getStartOn()) {
                 matcher = matcher.or(nameStartsWith(prefix));
@@ -75,14 +63,18 @@ public class FlowMatchers {
             }
         }
 
-        if (cfg.isSynthetic()) {
-            matcher = matcher.or(isSynthetic());
+        if (!isEmpty(cfg.getEquals())) {
+            for (String part : cfg.getEquals()) {
+                matcher = matcher.or(named(part));
+            }
         }
 
         return matcher;
     }
 
-    private static boolean isEmpty(List<String> list) {
-        return list == null || list.isEmpty();
+    public static class FlowMethodMatchers extends FlowGenericMatchers<MethodDescription> {
+    }
+
+    public static class FlowTypeMatchers extends FlowGenericMatchers<TypeDescription> {
     }
 }

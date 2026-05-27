@@ -1,11 +1,15 @@
 stack-output: ../stacks
-include:
-  start-on:
-    - ru.exp
-  contains:
-    - filter
-  synthetic: true
-
-exclude:
-  contains:
-    - ru.dev.flow.filters
+type:
+  include:
+    start-on:
+      - ru.exp
+    contains:
+      - filter
+    synthetic: true
+  exclude:
+    contains:
+      - ru.dev.flow.filters
+method:
+  exclude:
+    equals:
+      - toString

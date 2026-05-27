@@ -7,13 +7,14 @@ import net.bytebuddy.asm.Advice;
 import org.junit.jupiter.api.Test;
 import ru.dev.flow.advice.FlowAdvice;
 import ru.dev.flow.advice.TestBoundaryAdvice;
-import ru.dev.flow.filters.FlowMatchers;
+import ru.dev.flow.filters.FlowGenericMatchers;
 import ru.dev.flow.output.Json;
 import ru.dev.flow.stack.Events;
 
 import java.lang.instrument.Instrumentation;
 
-import static net.bytebuddy.matcher.ElementMatchers.*;
+import static net.bytebuddy.matcher.ElementMatchers.isAnnotatedWith;
+import static net.bytebuddy.matcher.ElementMatchers.nameEndsWith;
 import static ru.dev.flow.config.FlowConfig.CONFIG;
 
 public class FlowAgent {
@@ -26,11 +27,13 @@ public class FlowAgent {
             json.write();
         }));
 
+        var flowMethodMatchers = new FlowGenericMatchers.FlowMethodMatchers();
+        var flowTypeMatchers = new FlowGenericMatchers.FlowTypeMatchers();
         new AgentBuilder.Default()
                 .with(AgentBuilder.RedefinitionStrategy.REDEFINITION)
-                .type(FlowMatchers.typeFilter(CONFIG))
+                .type(flowTypeMatchers.filter(CONFIG))
                 .transform((builder, type, loader, module, pd) ->
-                        builder.method(any())
+                        builder.method(flowMethodMatchers.filter(CONFIG))
                                 .intercept(Advice.to(FlowAdvice.class))
                 )
                 .type(nameEndsWith("IT").or(nameEndsWith("Test")))

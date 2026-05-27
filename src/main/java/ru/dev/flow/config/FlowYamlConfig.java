@@ -15,8 +15,16 @@ public class FlowYamlConfig {
     @JsonProperty("stack-output")
     private String stackOutput;
 
-    private Match include = Match.EMPTY;
-    private Match exclude = Match.EMPTY;
+    private Type type;
+    private Type method;
+
+    @Setter
+    @Getter
+    public static class Type {
+
+        private Match include = Match.EMPTY;
+        private Match exclude = Match.EMPTY;
+    }
 
     @Setter
     @Getter
@@ -28,6 +36,8 @@ public class FlowYamlConfig {
         private List<String> startOn = List.of();
 
         private List<String> contains = List.of();
+
+        private List<String> equals = List.of();
 
         private boolean synthetic = false;
     }
