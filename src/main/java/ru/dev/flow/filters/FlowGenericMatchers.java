@@ -9,14 +9,16 @@ import ru.dev.flow.config.FlowYamlConfig;
 import static net.bytebuddy.matcher.ElementMatchers.*;
 import static org.apache.commons.collections4.CollectionUtils.isEmpty;
 
-public class FlowGenericMatchers<T extends NamedElement> {
+public interface FlowGenericMatchers<T extends NamedElement> {
 
-    public ElementMatcher.Junction<T> filter(FlowYamlConfig cfg) {
-        var includeMatcher = buildMatcher(cfg.getMethod().getInclude());
-        var excludeMatcher = buildMatcherExclude(cfg.getMethod().getExclude());
+    default ElementMatcher.Junction<T> filter(FlowYamlConfig.Type type) {
+        var includeMatcher = buildMatcher(type.getInclude());
+        var excludeMatcher = buildMatcherExclude(type.getExclude());
         // include AND NOT exclude
         return includeMatcher.and(not(excludeMatcher));
     }
+
+    ElementMatcher.Junction<T> filter(FlowYamlConfig cfg);
 
     private ElementMatcher.Junction<T> buildMatcher(FlowYamlConfig.Match cfg) {
         // если секция пустая → any()
@@ -72,9 +74,17 @@ public class FlowGenericMatchers<T extends NamedElement> {
         return matcher;
     }
 
-    public static class FlowMethodMatchers extends FlowGenericMatchers<MethodDescription> {
+    class FlowMethodMatchers implements FlowGenericMatchers<MethodDescription> {
+        @Override
+        public ElementMatcher.Junction<MethodDescription> filter(FlowYamlConfig cfg) {
+            return filter(cfg.getMethod());
+        }
     }
 
-    public static class FlowTypeMatchers extends FlowGenericMatchers<TypeDescription> {
+    class FlowTypeMatchers implements FlowGenericMatchers<TypeDescription> {
+        @Override
+        public ElementMatcher.Junction<TypeDescription> filter(FlowYamlConfig cfg) {
+            return filter(cfg.getType());
+        }
     }
 }
