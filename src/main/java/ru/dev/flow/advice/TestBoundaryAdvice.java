@@ -33,7 +33,7 @@ public class TestBoundaryAdvice {
         var className = method.getDeclaringClass().getName();
         var methodName = method.getName();
         var testName = className + "." + methodName;
-        Json json = new Json(Events.drainedEvents(), CONFIG.getStackOutput() + "/" + testName);
+        Json json = new Json(Events.drainedEvents(), CONFIG.getStackOutput() + "/" + testName + ".json");
         json.write();
     }
 }
