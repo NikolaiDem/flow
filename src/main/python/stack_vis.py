@@ -19,8 +19,10 @@ def build_tree(events, thread_id="unknown"):
             for n in stack
         ]
 
+
     tests = []
     stack = []
+
 
     stats = {
         "source_events": len(events),
@@ -32,127 +34,59 @@ def build_tree(events, thread_id="unknown"):
     }
 
 
-    has_tests = any(
-        e.get("type") == "START_TEST"
-        for e in events
-    )
+    # ---------------------------
+    # Создаем ROOT THREAD
+    # ---------------------------
+
+    root = {
+
+        "name": "THREAD",
+        "type": "THREAD",
+
+        "children": [],
+
+        "ts":
+            events[0].get("ts", 0)
+            if events
+            else 0,
+
+        "depth": 0,
+
+        "event_index": None,
+
+        "parent": None
+    }
 
 
-    # ---------------------------------
-    # Нет тестов -> создаем THREAD root
-    # ---------------------------------
+    tests.append(root)
 
-    if not has_tests:
+    stack = [root]
 
-        root = {
-
-            "name": "THREAD",
-            "type": "THREAD",
-
-            "children": [],
-
-            "ts": (
-                events[0].get("ts", 0)
-                if events
-                else 0
-            ),
-
-            "depth": 0,
-
-            "event_index": None,
-
-            "parent": None
-        }
-
-
-        tests.append(root)
-
-        stack = [root]
-
-        stats["tree_nodes"] += 1
+    stats["tree_nodes"] += 1
 
 
 
-    # ---------------------------------
-    # обработка событий
-    # ---------------------------------
+    # ---------------------------
+    # Обработка событий
+    # ---------------------------
 
     for idx, e in enumerate(events):
 
         etype = e.get("type")
 
 
-        # ============================
-        # START_TEST
-        # ============================
+        # ---------------------------
+        # START_TEST / END_TEST игнорируем
+        # ---------------------------
 
-        if etype == "START_TEST":
-
-            node = {
-
-                "name":
-                    f'TEST.{e.get("name", "unknown")}',
-
-                "type": "TEST",
-
-                "children": [],
-
-                "ts": e.get("ts", 0),
-
-                "depth": 0,
-
-                "event_index": idx,
-
-                "parent": None
-            }
-
-
-            tests.append(node)
-
-            stack = [node]
-
-            stats["tree_nodes"] += 1
-
+        if etype in ("START_TEST", "END_TEST"):
             continue
 
 
 
-        # ============================
-        # END_TEST
-        # ============================
-
-        if etype == "END_TEST":
-
-
-            if len(stack) > 1:
-
-                stats["errors"].append({
-
-                    "type": "END_TEST_WITH_OPEN_STACK",
-
-                    "thread": thread_id,
-
-                    "index": idx,
-
-                    "timestamp": e.get("ts"),
-
-                    "open_stack":
-                        stack_path(stack),
-
-                    "message":
-                        "END_TEST received but methods are still open"
-                })
-
-
-            stack = []
-
-            continue
-
-
-
-        # ============================
+        # ---------------------------
         # ENTER
-        # ============================
+        # ---------------------------
 
         if etype == "ENTER":
 
@@ -187,7 +121,7 @@ def build_tree(events, thread_id="unknown"):
 
 
 
-            # ENTER без родителя
+            # ENTER без корня
 
             if not stack:
 
@@ -204,7 +138,7 @@ def build_tree(events, thread_id="unknown"):
                     "method": name,
 
                     "message":
-                        "ENTER has no parent node"
+                        "ENTER without parent"
                 })
 
 
@@ -223,9 +157,9 @@ def build_tree(events, thread_id="unknown"):
 
 
 
-        # ============================
+        # ---------------------------
         # EXIT
-        # ============================
+        # ---------------------------
 
         elif etype == "EXIT":
 
@@ -242,7 +176,7 @@ def build_tree(events, thread_id="unknown"):
 
             # EXIT без ENTER
 
-            if not stack:
+            if not stack or stack[-1]["type"] != "METHOD":
 
                 stats["errors"].append({
 
@@ -256,8 +190,11 @@ def build_tree(events, thread_id="unknown"):
 
                     "received_exit": name,
 
+                    "stack":
+                        stack_path(stack),
+
                     "message":
-                        "EXIT received but stack is empty"
+                        "EXIT without matching ENTER"
                 })
 
 
@@ -271,7 +208,7 @@ def build_tree(events, thread_id="unknown"):
 
 
 
-            # нарушение вложенности
+            # Нарушение вложенности
 
             if current["name"] != name:
 
@@ -317,7 +254,7 @@ def build_tree(events, thread_id="unknown"):
 
                     "message":
                         (
-                            f"Trying to close {name}, "
+                            f"Closing {name}, "
                             f"but {current['name']} "
                             "is still open"
                         )
@@ -328,9 +265,9 @@ def build_tree(events, thread_id="unknown"):
 
 
 
-        # ============================
+        # ---------------------------
         # неизвестное событие
-        # ============================
+        # ---------------------------
 
         else:
 
@@ -351,12 +288,11 @@ def build_tree(events, thread_id="unknown"):
 
 
 
-    # ---------------------------------
-    # FINAL VALIDATION
-    # ---------------------------------
+    # ---------------------------
+    # Проверка незакрытых методов
+    # ---------------------------
 
-    if stack:
-
+    if len(stack) > 1:
 
         stats["errors"].append({
 
@@ -373,6 +309,10 @@ def build_tree(events, thread_id="unknown"):
 
 
 
+    # ---------------------------
+    # Проверка потерь
+    # ---------------------------
+
     expected_method_nodes = (
         stats["enter_events"]
     )
@@ -381,7 +321,6 @@ def build_tree(events, thread_id="unknown"):
     actual_method_nodes = (
         count_method_nodes(tests)
     )
-
 
 
     if expected_method_nodes != actual_method_nodes:
