@@ -2,10 +2,7 @@ stack-output: ../stacks
 type:
   include:
     start-on:
-      - ru.exp
-    contains:
-      - filter
-    synthetic: true
+      - ru.dev
   exclude:
     contains:
       - ru.dev.flow.filters

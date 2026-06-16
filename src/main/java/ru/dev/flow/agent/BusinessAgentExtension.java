@@ -6,21 +6,22 @@ import net.bytebuddy.matcher.ElementMatcher;
 
 import java.util.List;
 
-import static io.opentelemetry.javaagent.extension.matcher.AgentElementMatchers.hasClassesNamed;
+import static net.bytebuddy.matcher.ElementMatchers.any;
 
 public class BusinessAgentExtension extends InstrumentationModule {
 
-    protected BusinessAgentExtension(String mainInstrumentationName, String... additionalInstrumentationNames) {
-        super(mainInstrumentationName, additionalInstrumentationNames);
+    public BusinessAgentExtension() {
+        super("business-agent");
+        System.out.println(BusinessAgentExtension.class);
     }
 
     @Override
     public ElementMatcher.Junction<ClassLoader> classLoaderMatcher() {
-        return hasClassesNamed("javax.servlet.http.HttpServlet");
+        return any();
     }
 
     @Override
     public List<TypeInstrumentation> typeInstrumentations() {
-        return List.of();
+        return List.of(new RootInstrumentation());
     }
 }
