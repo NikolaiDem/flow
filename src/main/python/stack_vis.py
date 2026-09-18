@@ -2,12 +2,27 @@ import json
 from pathlib import Path
 
 
+
 # ---------------------------
-# BUILD TREE (REPLAY STACK)
+# Есть список json-ов с полями className, methodName, type [ENTER, EXIT, START_TEST, END_TEST]
 # ---------------------------
 def build_tree(events, thread_id="unknown"):
+
+    def stack_path(stack):
+        return [
+            {
+                "name": n["name"],
+                "type": n["type"],
+                "depth": n.get("depth", 0),
+                "event_index": n.get("event_index")
+            }
+            for n in stack
+        ]
+
+
     tests = []
     stack = []
+
 
     stats = {
         "source_events": len(events),
@@ -18,152 +33,316 @@ def build_tree(events, thread_id="unknown"):
         "errors": []
     }
 
-    has_tests = any(e["type"] == "START_TEST" for e in events)
 
-    # Если тестов нет — создаем root THREAD
-    if not has_tests:
-        root = {
-            "name": "THREAD",
-            "type": "THREAD",
-            "children": [],
-            "ts": events[0].get("ts", 0) if events else 0,
-            "depth": 0
-        }
+    # ---------------------------
+    # Создаем ROOT THREAD
+    # ---------------------------
 
-        tests.append(root)
-        stack = [root]
+    root = {
 
-        stats["tree_nodes"] += 1
+        "name": "THREAD",
+        "type": "THREAD",
+
+        "children": [],
+
+        "ts":
+            events[0].get("ts", 0)
+            if events
+            else 0,
+
+        "depth": 0,
+
+        "event_index": None,
+
+        "parent": None
+    }
+
+
+    tests.append(root)
+
+    stack = [root]
+
+    stats["tree_nodes"] += 1
+
+
+
+    # ---------------------------
+    # Обработка событий
+    # ---------------------------
 
     for idx, e in enumerate(events):
+
         etype = e.get("type")
 
-        # ---------------------------
-        # START_TEST
-        # ---------------------------
-        if etype == "START_TEST":
-            node = {
-                "name": f'TEST.{e.get("name", "unknown")}',
-                "type": "TEST",
-                "children": [],
-                "ts": e.get("ts", 0),
-                "depth": 0
-            }
 
-            tests.append(node)
-            stack = [node]
+        # ---------------------------
+        # START_TEST / END_TEST игнорируем
+        # ---------------------------
 
-            stats["tree_nodes"] += 1
+        if etype in ("START_TEST", "END_TEST"):
             continue
 
-        # ---------------------------
-        # END_TEST
-        # ---------------------------
-        if etype == "END_TEST":
 
-            # Проверяем что стек закрыт
-            if len(stack) > 1:
-                stats["errors"].append(
-                    f"[{thread_id}] END_TEST with unclosed stack "
-                    f"({len(stack)-1} nodes remain)"
-                )
-
-            stack = []
-            continue
 
         # ---------------------------
         # ENTER
         # ---------------------------
+
         if etype == "ENTER":
 
             stats["enter_events"] += 1
 
-            name = f'{e.get("className", "?")}.{e.get("methodName", "?")}'
+
+            name = (
+                f'{e.get("className", "?")}.'
+                f'{e.get("methodName", "?")}'
+            )
+
 
             node = {
+
                 "name": name,
+
                 "type": "METHOD",
+
                 "children": [],
+
                 "ts": e.get("ts", 0),
-                "depth": len(stack)
+
+                "depth": len(stack),
+
+                "event_index": idx,
+
+                "parent":
+                    stack[-1]["name"]
+                    if stack
+                    else None
             }
 
-            # ENTER без родителя
+
+
+            # ENTER без корня
+
             if not stack:
-                stats["errors"].append(
-                    f"[{thread_id}] ENTER without parent "
-                    f"at index {idx}: {name}"
-                )
+
+                stats["errors"].append({
+
+                    "type": "ORPHAN_ENTER",
+
+                    "thread": thread_id,
+
+                    "index": idx,
+
+                    "timestamp": e.get("ts"),
+
+                    "method": name,
+
+                    "message":
+                        "ENTER without parent"
+                })
+
 
                 stats["lost_events"].append(idx)
+
                 continue
 
+
+
             stack[-1]["children"].append(node)
+
             stack.append(node)
 
+
             stats["tree_nodes"] += 1
+
+
 
         # ---------------------------
         # EXIT
         # ---------------------------
+
         elif etype == "EXIT":
+
 
             stats["exit_events"] += 1
 
-            name = f'{e.get("className", "?")}.{e.get("methodName", "?")}'
+
+            name = (
+                f'{e.get("className", "?")}.'
+                f'{e.get("methodName", "?")}'
+            )
+
+
 
             # EXIT без ENTER
-            if not stack:
-                stats["errors"].append(
-                    f"[{thread_id}] EXIT without ENTER "
-                    f"at index {idx}: {name}"
-                )
+
+            if not stack or stack[-1]["type"] != "METHOD":
+
+                stats["errors"].append({
+
+                    "type": "ORPHAN_EXIT",
+
+                    "thread": thread_id,
+
+                    "index": idx,
+
+                    "timestamp": e.get("ts"),
+
+                    "received_exit": name,
+
+                    "stack":
+                        stack_path(stack),
+
+                    "message":
+                        "EXIT without matching ENTER"
+                })
+
 
                 stats["lost_events"].append(idx)
+
                 continue
+
+
 
             current = stack[-1]
 
-            # Проверяем совпадение метода
+
+
+            # Нарушение вложенности
+
             if current["name"] != name:
-                stats["errors"].append(
-                    f"[{thread_id}] STACK MISMATCH at index {idx}: "
-                    f"expected EXIT '{current['name']}', got '{name}'"
-                )
+
+
+                stats["errors"].append({
+
+                    "type": "STACK_MISMATCH",
+
+                    "thread": thread_id,
+
+                    "index": idx,
+
+                    "timestamp": e.get("ts"),
+
+
+                    "received_exit":
+                        name,
+
+
+                    "expected_exit":
+                        current["name"],
+
+
+                    "problem_node": {
+
+                        "name":
+                            current["name"],
+
+                        "event_index":
+                            current["event_index"],
+
+                        "depth":
+                            current["depth"],
+
+                        "parent":
+                            current["parent"]
+                    },
+
+
+                    "stack":
+                        stack_path(stack),
+
+
+                    "message":
+                        (
+                            f"Closing {name}, "
+                            f"but {current['name']} "
+                            "is still open"
+                        )
+                })
+
 
             stack.pop()
 
+
+
         # ---------------------------
-        # UNKNOWN EVENT
+        # неизвестное событие
         # ---------------------------
+
         else:
-            stats["errors"].append(
-                f"[{thread_id}] UNKNOWN EVENT TYPE at index {idx}: {etype}"
-            )
+
+
+            stats["errors"].append({
+
+                "type": "UNKNOWN_EVENT",
+
+                "thread": thread_id,
+
+                "index": idx,
+
+                "event": e,
+
+                "message":
+                    f"Unknown event type {etype}"
+            })
+
+
 
     # ---------------------------
-    # FINAL VALIDATION
+    # Проверка незакрытых методов
     # ---------------------------
 
-    # Остались незакрытые методы
-    if stack:
-        remaining = [n["name"] for n in stack]
+    if len(stack) > 1:
 
-        stats["errors"].append(
-            f"[{thread_id}] UNCLOSED STACK: {remaining}"
-        )
+        stats["errors"].append({
 
-    expected_method_nodes = stats["enter_events"]
+            "type": "UNCLOSED_STACK",
 
-    # tree_nodes включает TEST/THREAD
-    actual_method_nodes = count_method_nodes(tests)
+            "thread": thread_id,
+
+            "open_stack":
+                stack_path(stack),
+
+            "message":
+                "Methods entered but never exited"
+        })
+
+
+
+    # ---------------------------
+    # Проверка потерь
+    # ---------------------------
+
+    expected_method_nodes = (
+        stats["enter_events"]
+    )
+
+
+    actual_method_nodes = (
+        count_method_nodes(tests)
+    )
+
 
     if expected_method_nodes != actual_method_nodes:
-        stats["errors"].append(
-            f"[{thread_id}] LOST EVENTS DETECTED: "
-            f"ENTER events = {expected_method_nodes}, "
-            f"nodes in tree = {actual_method_nodes}"
-        )
+
+
+        stats["errors"].append({
+
+            "type": "LOST_EVENTS",
+
+            "thread": thread_id,
+
+            "enter_events":
+                expected_method_nodes,
+
+            "tree_nodes":
+                actual_method_nodes,
+
+            "message":
+                "ENTER count differs from tree nodes"
+        })
+
+
 
     return tests, stats
 
