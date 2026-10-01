@@ -64,11 +64,14 @@ def format_to_json(jfr_dir, out_dir):
 
 def parse_event(raw: dict) -> dict:
     v = raw["values"]
+    start_time = parser.isoparse(v["startTime"])
+    duration = isodate.parse_duration(v["duration"])
     event = {
         "threadName": v["eventThread"]["javaName"],
         "displayName": v["displayName"],
-        "startTime": parser.isoparse(v["startTime"]),
-        "duration": isodate.parse_duration(v["duration"]),
+        "startTime": start_time,
+        "endTime": start_time + duration,
+        "duration": duration,
     }
     print(event)
     return event
@@ -117,6 +120,51 @@ def find_overlaps(events: list[dict]) -> list[tuple[dict, dict]]:
         else:
             active.discard(i)
     return overlaps
+
+
+def calc_intersection(left: dict, right: dict) -> float:
+    left_start = left["startTime"]
+    right_start = right["startTime"]
+    left_end = left["endTime"]
+    right_end = right["endTime"]
+
+    start = max(left_start, right_start)
+    end = min(left_end, right_end)
+
+    delta: timedelta = end - start
+    secs = delta.total_seconds() * 1000
+    return secs if secs > 0 else 0.0
+
+
+def build_overlap_dict(overlaps):
+    result = defaultdict(list)
+    for a, b in overlaps:
+        left = a["displayName"]
+        right = b["displayName"]
+        intersection = calc_intersection(a, b)
+        result[left].append((right, intersection))
+        result[right].append((left, intersection))
+
+    # сортировка каждого списка по убыванию intersection
+    for name in result:
+        result[name].sort(key=lambda x: x[1], reverse=True)
+
+    return dict(result)
+
+
+def print_overlaps_table(overlap_dict, top_n=10):
+    name_w = 40
+    other_w = 40
+    header = f"{'TEST':<{name_w}} {'OTHER':<{other_w}} {'MS':>10}"
+    print(header)
+    print("-" * len(header))
+
+    for name, items in overlap_dict.items():
+        for i, (other, ms) in enumerate(items[:top_n]):
+            # имя показываем только у первой строки блока
+            left = name if i == 0 else ""
+            print(f"{left:<{name_w}} {other:<{other_w}} {ms:>10.1f}")
+        print()
 
 
 if __name__ == "__main__":
