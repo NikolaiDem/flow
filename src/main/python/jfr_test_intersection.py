@@ -139,11 +139,11 @@ def calc_intersection(left: dict, right: dict) -> float:
 def build_overlap_dict(overlaps):
     result = defaultdict(list)
     for a, b in overlaps:
-        left = a["displayName"]
-        right = b["displayName"]
+        left = a['displayName']
+        right = b['displayName']
         intersection = calc_intersection(a, b)
-        result[left].append((right, intersection))
-        result[right].append((left, intersection))
+        result[left].append((b, intersection))
+        result[right].append((a, intersection))
 
     # сортировка каждого списка по убыванию intersection
     for name in result:
@@ -163,7 +163,7 @@ def print_overlaps_table(overlap_dict, top_n=10):
         for i, (other, ms) in enumerate(items[:top_n]):
             # имя показываем только у первой строки блока
             left = name if i == 0 else ""
-            print(f"{left:<{name_w}} {other:<{other_w}} {ms:>10.1f}")
+            print(f"{left:<{name_w}} ----------------- {other:<{other_w}} {ms:>10.1f} ms")
         print()
 
 
@@ -173,7 +173,6 @@ if __name__ == "__main__":
     format_to_json(jfr_path, json_path)
     all_events = collect_all(Path("D:/work/jfr/json"))
     overlaps = find_overlaps(all_events)
-    print('OVERLAPS')
-    print(overlaps)
-    print(f"events size {len(all_events)}")
-    print(f"overlaps size {len(overlaps)}")
+    overlap_dicts = build_overlap_dict(overlaps)
+    print_overlaps_table(overlap_dicts)
+    print(len(all_events))
