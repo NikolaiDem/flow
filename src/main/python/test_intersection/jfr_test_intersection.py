@@ -69,6 +69,7 @@ class TestCase:
     start_time: datetime
     end_time: datetime
     duration: timedelta
+    result: str
 
     def __post_init__(self) -> None:
         if self.end_time < self.start_time:
@@ -80,7 +81,7 @@ class TestCase:
     def __str__(self) -> str:
         return (
             f"[{self.thread_name}] {self.display_name} "
-            f"({self.duration.total_seconds():.3f}s)"
+            f"({self.duration.total_seconds():.3f}s) result={self.result}"
         )
 
 
@@ -163,6 +164,7 @@ def parse_event(raw: dict) -> TestCase | None:
         start_time=start_time,
         end_time=start_time + duration,
         duration=duration,
+        result=values.get("result", "<unknown>"),
     )
 
 
@@ -331,7 +333,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 if __name__ == "__main__":
     jfr_path = Path("D:/work/jfr")
     json_path = Path("D:/work/jfr/json")
-    format_to_json(jfr_path, json_path)
+    jfr_to_json(jfr_path, json_path)
     all_events = collect_all(Path("D:/work/jfr/json"))
     overlaps = find_overlaps(all_events)
     overlap_dicts = build_overlap_dict(overlaps)

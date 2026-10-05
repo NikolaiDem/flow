@@ -1,8 +1,8 @@
 # Требования:
 # В строке поиска вводится название теста, для которого нужно найти пересекающиеся тесты
 # Найденные тесты должны отобразится в виде таймлайна
-# У каждого найденного теста должно отобразиться название, поток
-# server.py
+# У каждого найденного теста должно отобразиться название, поток, результат
+# Цвет упавших тестов красный, цвет успешных зеленый. Основной тест выделен в рамку
 # server.py
 from __future__ import annotations
 
@@ -33,7 +33,20 @@ HTML_PAGE = """<!DOCTYPE html>
          max-width: 1200px; color: #222; }
   input { width: 100%; padding: .6rem; font-size: 1rem; box-sizing: border-box; }
   .item { margin: 1.5rem 0; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
-  .name { font-weight: 600; margin-bottom: .5rem; font-size: 1.05rem; }
+  .name { font-weight: 600; margin-bottom: .5rem; font-size: 1.05rem;
+          display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+
+  .status {
+    font-size: .75rem;
+    font-weight: 600;
+    padding: .1rem .5rem;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  .status.passed { background: #e3f5e0; color: #2e7d32; }
+  .status.failed { background: #fde7e5; color: #c62828; }
+  .status.other  { background: #eee; color: #666; }
 
   .timeline {
     margin: .3rem 0 .3rem 0;
@@ -73,8 +86,19 @@ HTML_PAGE = """<!DOCTYPE html>
     opacity: .9;
     cursor: help;
   }
-  .bar.highlight { background: #e25c4a; opacity: 1; }
-  .bar.partner   { background: #7bb86f; }
+  /* Цвет по результату теста */
+  .bar.passed { background: #7bb86f; }
+  .bar.failed { background: #e25c4a; }
+  .bar.other  { background: #9aa4ad; }
+
+  /* Искомый тест выделен рамкой (цвет — по статусу) */
+  .bar.highlight {
+    opacity: 1;
+    outline: 2px solid #222;
+    outline-offset: 0;
+    box-shadow: 0 0 0 1px #fff inset;
+    z-index: 1;
+  }
 
   .pair { display: flex; justify-content: space-between; align-items: baseline;
           padding: .15rem 0; gap: 1rem; }
@@ -96,8 +120,10 @@ HTML_PAGE = """<!DOCTYPE html>
 <input id="q" placeholder="Начните вводить название теста..." autofocus>
 
 <div class="legend">
-  <span style="background:#e25c4a"></span>искомый тест
-  <span style="background:#7bb86f; margin-left:1rem"></span>пересекающийся тест
+  <span style="background:#7bb86f"></span>успешный
+  <span style="background:#e25c4a; margin-left:1rem"></span>упавший
+  <span style="background:#9aa4ad; margin-left:1rem"></span>прочее
+  <span style="border:2px solid #222; width:8px; height:8px; background:transparent; margin-left:1rem"></span>искомый тест
 </div>
 
 <div id="results"></div>
@@ -120,6 +146,13 @@ async function search() {
   render(data);
 }
 
+function statusClass(result) {
+  const r = String(result || '').toUpperCase();
+  if (r === 'PASSED' || r === 'SUCCESS' || r === 'SUCCESSFUL') return 'passed';
+  if (r === 'FAILED' || r === 'FAILURE' || r === 'ERROR') return 'failed';
+  return 'other';
+}
+
 function render(items) {
   if (!items.length) {
     results.innerHTML = '<div class="empty">Ничего не найдено</div>';
@@ -127,14 +160,16 @@ function render(items) {
   }
   results.innerHTML = items.map(item => `
     <div class="item">
-      <div class="name">${escapeHtml(item.name)}
+      <div class="name">
+        <span>${escapeHtml(item.name)}</span>
         <span class="threads">[${escapeHtml(item.thread)}]</span>
+        <span class="status ${statusClass(item.result)}">${escapeHtml(item.result)}</span>
       </div>
 
       <div class="timeline">
         ${item.rows.map(r => `
           <div class="row">
-            <div class="row-label" title="${escapeHtml(r.name)} [${escapeHtml(r.thread)}]">
+            <div class="row-label" title="${escapeHtml(r.name)} [${escapeHtml(r.thread)}] — ${escapeHtml(r.result)}">
               ${escapeHtml(r.name)}
               <span class="threads">[${escapeHtml(r.thread)}]</span>
             </div>
@@ -156,6 +191,7 @@ function render(items) {
           <span class="other">
             ${escapeHtml(p.other)}
             <span class="threads">[${escapeHtml(p.thread)}]</span>
+            <span class="status ${statusClass(p.result)}">${escapeHtml(p.result)}</span>
           </span>
           <span class="ms">${p.ms.toFixed(1)} ms</span>
         </div>
@@ -183,6 +219,16 @@ def _fmt_dt(dt: datetime) -> str:
     return dt.strftime("%H:%M:%S.%f")[:-3]
 
 
+def _result_class(result: str) -> str:
+    """PASSED/SUCCESS -> passed, FAILED/ERROR -> failed, иначе other."""
+    r = (result or "").upper()
+    if r in ("PASSED", "SUCCESS", "SUCCESSFUL"):
+        return "passed"
+    if r in ("FAILED", "FAILURE", "ERROR"):
+        return "failed"
+    return "other"
+
+
 def _build_timeline(
     main: TestCase,
     partners: list[Overlap],
@@ -191,7 +237,7 @@ def _build_timeline(
 ) -> list[dict]:
     """
     Возвращает список строк таймлайна — по одной на тест:
-      [ {name, thread, cls, left, width, title}, ... ]
+      [ {name, thread, result, cls, left, width, title}, ... ]
     Первая строка — искомый тест, дальше — партнёры.
     Все координаты — проценты от общего окна [0..100].
     """
@@ -200,12 +246,14 @@ def _build_timeline(
     def pct(ms_abs: float) -> float:
         return (ms_abs - axis_start_ms) / span * 100.0
 
-    def make_row(tc: TestCase, cls: str, title: str) -> dict:
+    def make_row(tc: TestCase, extra_cls: str, title: str) -> dict:
         left = pct(_ts_to_ms(tc.start_time))
         right = pct(_ts_to_ms(tc.end_time))
+        cls = f"{_result_class(tc.result)} {extra_cls}".strip()
         return {
             "name": tc.display_name,
             "thread": tc.thread_name,
+            "result": tc.result,
             "cls": cls,
             "left": round(left, 3),
             "width": round(max(right - left, 0.4), 3),  # минимум для видимости
@@ -214,11 +262,12 @@ def _build_timeline(
 
     rows: list[dict] = []
 
-    # 1) Искомый тест — сверху
+    # 1) Искомый тест — сверху, с рамкой
     rows.append(make_row(
         main,
-        cls="highlight",
+        extra_cls="highlight",
         title=f"{main.display_name} [{main.thread_name}] "
+              f"result={main.result} "
               f"{main.duration.total_seconds() * 1000:.1f} ms",
     ))
 
@@ -227,8 +276,9 @@ def _build_timeline(
         other = ov.other
         rows.append(make_row(
             other,
-            cls="partner",
+            extra_cls="",
             title=f"{other.display_name} [{other.thread_name}] "
+                  f"result={other.result} "
                   f"пересечение {ov.intersection_ms:.1f} ms",
         ))
 
@@ -262,6 +312,7 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "other": ov.other.display_name,
                     "thread": ov.other.thread_name,
+                    "result": ov.other.result,
                     "ms": ov.intersection_ms,
                 }
                 for ov in partners
@@ -270,6 +321,7 @@ class Handler(BaseHTTPRequestHandler):
             result.append({
                 "name": test.display_name,
                 "thread": test.thread_name,
+                "result": test.result,
                 "partners": partners_json,
                 "rows": rows,
                 "axis_start": _fmt_dt(GLOBAL_MIN),
