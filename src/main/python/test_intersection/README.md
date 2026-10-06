@@ -41,6 +41,17 @@ pip install -r requirements.txt
 
 ## Настройка JUnit 5 для записи JFR
 
+Для junit version<6 Добавьте в `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>org.junit.platform</groupId>
+    <artifactId>junit-platform-jfr</artifactId>
+    <version>1.14.4</version>
+    <scope>test</scope>
+</dependency>
+```
+
 Добавьте в команду запуска тестов следующие параметры JVM:
 
 ```
