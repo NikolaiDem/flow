@@ -6,3 +6,15 @@ mvn clean install
 
 Посмотреть класс после инструментации javaagent-ом
 -Dnet.bytebuddy.dump=D://work/bytebudyy
+
+# Включение junit jfr событий
+Добавить в cmd запуска:
+-XX:StartFlightRecording=filename=D:/work/jfr/recording-%p-%t.jfr 
+-Djunit.jupiter.extensions.autodetection.enabled=true
+
+org.junit.TestExecution - отслеживание выполнения тестового метода 
+
+Преобразовать recording.jfr в json
+jfr print --json --events "ru.dev.flow.advice.LogRecordingEvent" recording.jfr > output.json
+
+Использовать jfr_test_intersection.py
