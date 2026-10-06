@@ -85,12 +85,10 @@ HTML_PAGE = """<!DOCTYPE html>
     opacity: .9;
     cursor: help;
   }
-  /* Цвет по результату теста */
   .bar.passed { background: #7bb86f; }
   .bar.failed { background: #e25c4a; }
   .bar.other  { background: #9aa4ad; }
 
-  /* Искомый тест выделен рамкой (цвет — по статусу) */
   .bar.highlight {
     opacity: 1;
     outline: 2px solid #222;
@@ -113,7 +111,6 @@ HTML_PAGE = """<!DOCTYPE html>
                  border-radius: 2px; margin-right: .3rem;
                  vertical-align: middle; }
 
-  /* Стили для выбора группы тестов */
   .group-selector {
     margin: 1.5rem 0;
     padding: 1rem;
@@ -231,6 +228,23 @@ HTML_PAGE = """<!DOCTYPE html>
     background: #ccc;
     cursor: not-allowed;
   }
+  .select-actions {
+    display: flex;
+    gap: .5rem;
+    margin-top: .5rem;
+    font-size: .8rem;
+  }
+  .select-actions button {
+    padding: .3rem .6rem;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: .8rem;
+  }
+  .select-actions button:hover {
+    background: #f0f0f0;
+  }
 </style>
 </head>
 <body>
@@ -253,10 +267,15 @@ HTML_PAGE = """<!DOCTYPE html>
            placeholder="Выберите тесты для построения таймлайна..." readonly>
     <div class="multi-select-dropdown" id="groupDropdown">
       <div class="multi-select-search">
-        <input type="text" id="groupSearch" placeholder="Поиск...">
+        <input type="text" id="groupSearch" placeholder="Поиск..." 
+               onclick="event.stopPropagation()">
       </div>
       <div id="groupOptions"></div>
     </div>
+  </div>
+  <div class="select-actions">
+    <button id="selectAllBtn">Выбрать все видимые</button>
+    <button id="clearAllBtn">Очистить</button>
   </div>
   <div class="selected-tags" id="selectedTags"></div>
   <button class="build-timeline-btn" id="buildBtn" disabled>
@@ -275,20 +294,27 @@ const groupOptions = document.getElementById('groupOptions');
 const selectedTags = document.getElementById('selectedTags');
 const buildBtn = document.getElementById('buildBtn');
 const groupTimeline = document.getElementById('groupTimeline');
+const selectAllBtn = document.getElementById('selectAllBtn');
+const clearAllBtn = document.getElementById('clearAllBtn');
 let timer = null;
 let allTests = [];
 let selectedTests = new Set();
+let visibleTests = [];
 
 q.addEventListener('input', () => {
   clearTimeout(timer);
   timer = setTimeout(search, 150);
 });
 
-// Загружаем список всех тестов при старте
 async function loadAllTests() {
-  const r = await fetch('/all-tests');
-  allTests = await r.json();
-  renderGroupOptions();
+  try {
+    const r = await fetch('/all-tests');
+    allTests = await r.json();
+    console.log('Загружено тестов:', allTests.length);
+    renderGroupOptions();
+  } catch (e) {
+    console.error('Ошибка загрузки списка тестов:', e);
+  }
 }
 
 groupInput.addEventListener('click', (e) => {
@@ -309,15 +335,23 @@ groupSearch.addEventListener('input', () => {
   renderGroupOptions(groupSearch.value);
 });
 
+groupSearch.addEventListener('click', (e) => e.stopPropagation());
+
 function renderGroupOptions(filter = '') {
   const lowerFilter = filter.toLowerCase();
-  const filtered = allTests.filter(t => 
+  visibleTests = allTests.filter(t => 
+    !lowerFilter ||
     t.name.toLowerCase().includes(lowerFilter) ||
     t.thread.toLowerCase().includes(lowerFilter)
   );
 
-  groupOptions.innerHTML = filtered.map(t => `
-    <div class="multi-select-option" data-name="${escapeHtml(t.name)}">
+  if (!visibleTests.length) {
+    groupOptions.innerHTML = '<div class="multi-select-option" style="color:#999;cursor:default">Ничего не найдено</div>';
+    return;
+  }
+
+  groupOptions.innerHTML = visibleTests.map(t => `
+    <div class="multi-select-option" data-name="${escapeAttr(t.name)}">
       <input type="checkbox" ${selectedTests.has(t.name) ? 'checked' : ''}>
       <span>${escapeHtml(t.name)}</span>
       <span class="threads">[${escapeHtml(t.thread)}]</span>
@@ -325,7 +359,7 @@ function renderGroupOptions(filter = '') {
     </div>
   `).join('');
 
-  groupOptions.querySelectorAll('.multi-select-option').forEach(opt => {
+  groupOptions.querySelectorAll('.multi-select-option[data-name]').forEach(opt => {
     opt.addEventListener('click', (e) => {
       e.stopPropagation();
       const name = opt.dataset.name;
@@ -345,9 +379,13 @@ function renderSelectedTags() {
   selectedTags.innerHTML = Array.from(selectedTests).map(name => `
     <span class="selected-tag">
       ${escapeHtml(name)}
-      <button onclick="removeTest('${escapeHtml(name).replace(/'/g, "\\'")}')">&times;</button>
+      <button data-remove="${escapeAttr(name)}">&times;</button>
     </span>
   `).join('');
+
+  selectedTags.querySelectorAll('button[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => removeTest(btn.dataset.remove));
+  });
 }
 
 function removeTest(name) {
@@ -361,17 +399,36 @@ function updateBuildBtn() {
   buildBtn.disabled = selectedTests.size < 2;
 }
 
+selectAllBtn.addEventListener('click', () => {
+  visibleTests.forEach(t => selectedTests.add(t.name));
+  renderGroupOptions(groupSearch.value);
+  renderSelectedTags();
+  updateBuildBtn();
+});
+
+clearAllBtn.addEventListener('click', () => {
+  selectedTests.clear();
+  renderGroupOptions(groupSearch.value);
+  renderSelectedTags();
+  updateBuildBtn();
+});
+
 buildBtn.addEventListener('click', async () => {
   if (selectedTests.size < 2) return;
 
   const names = Array.from(selectedTests);
-  const r = await fetch('/group-timeline', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({names})
-  });
-  const data = await r.json();
-  renderGroupTimeline(data);
+  groupTimeline.innerHTML = '<div class="empty">Строим таймлайн...</div>';
+  try {
+    const r = await fetch('/group-timeline', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({names})
+    });
+    const data = await r.json();
+    renderGroupTimeline(data);
+  } catch (e) {
+    groupTimeline.innerHTML = '<div class="empty">Ошибка: ' + escapeHtml(e.message) + '</div>';
+  }
 });
 
 function renderGroupTimeline(data) {
@@ -386,14 +443,14 @@ function renderGroupTimeline(data) {
       <div class="timeline">
         ${data.rows.map(r => `
           <div class="row">
-            <div class="row-label" title="${escapeHtml(r.name)} [${escapeHtml(r.thread)}] — ${escapeHtml(r.result)}">
+            <div class="row-label" title="${escapeAttr(r.name)} [${escapeAttr(r.thread)}] — ${escapeAttr(r.result)}">
               ${escapeHtml(r.name)}
               <span class="threads">[${escapeHtml(r.thread)}]</span>
             </div>
             <div class="row-track">
               <div class="bar ${r.cls}"
                    style="left:${r.left}%; width:${r.width}%"
-                   title="${escapeHtml(r.title)}"></div>
+                   title="${escapeAttr(r.title)}"></div>
             </div>
           </div>
         `).join('')}
@@ -437,14 +494,14 @@ function render(items) {
       <div class="timeline">
         ${item.rows.map(r => `
           <div class="row">
-            <div class="row-label" title="${escapeHtml(r.name)} [${escapeHtml(r.thread)}] — ${escapeHtml(r.result)}">
+            <div class="row-label" title="${escapeAttr(r.name)} [${escapeAttr(r.thread)}] — ${escapeAttr(r.result)}">
               ${escapeHtml(r.name)}
               <span class="threads">[${escapeHtml(r.thread)}]</span>
             </div>
             <div class="row-track">
               <div class="bar ${r.cls}"
                    style="left:${r.left}%; width:${r.width}%"
-                   title="${escapeHtml(r.title)}"></div>
+                   title="${escapeAttr(r.title)}"></div>
             </div>
           </div>
         `).join('')}
@@ -454,7 +511,9 @@ function render(items) {
         <span>${item.axis_end}</span>
       </div>
 
-      ${item.partners.map(p => `
+      ${item.partners.length === 0 
+        ? '<div class="pair"><span class="other" style="color:#999">Пересечений не найдено</span></div>' 
+        : item.partners.map(p => `
         <div class="pair">
           <span class="other">
             ${escapeHtml(p.other)}
@@ -472,6 +531,10 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
+}
+
+function escapeAttr(s) {
+  return escapeHtml(s);
 }
 
 // Загружаем список тестов при старте
@@ -500,6 +563,38 @@ def _result_class(result: str) -> str:
     return "other"
 
 
+def _make_row(
+        tc: TestCase,
+        axis_start_ms: float,
+        axis_end_ms: float,
+        extra_cls: str = "",
+        extra_title: str = "",
+) -> dict:
+    """Строит одну строку таймлайна для теста."""
+    span = max(axis_end_ms - axis_start_ms, 1.0)
+    left = (_ts_to_ms(tc.start_time) - axis_start_ms) / span * 100.0
+    right = (_ts_to_ms(tc.end_time) - axis_start_ms) / span * 100.0
+    cls = f"{_result_class(tc.result)} {extra_cls}".strip()
+
+    title = (
+        f"{tc.display_name} [{tc.thread_name}] "
+        f"result={tc.result} "
+        f"{tc.duration.total_seconds() * 1000:.1f} ms"
+    )
+    if extra_title:
+        title += f" — {extra_title}"
+
+    return {
+        "name": tc.display_name,
+        "thread": tc.thread_name,
+        "result": tc.result,
+        "cls": cls,
+        "left": round(left, 3),
+        "width": round(max(right - left, 0.4), 3),
+        "title": title,
+    }
+
+
 def _build_timeline(
         main: TestCase,
         partners: list[Overlap],
@@ -507,94 +602,45 @@ def _build_timeline(
         axis_end_ms: float,
 ) -> list[dict]:
     """
-    Возвращает список строк таймлайна — по одной на тест:
-      [ {name, thread, result, cls, left, width, title}, ... ]
-    Первая строка — искомый тест, дальше — партнёры.
-    Все координаты — проценты от общего окна [0..100].
+    Таймлайн для одиночного поиска: искомый тест + его пересечения.
     """
-    span = max(axis_end_ms - axis_start_ms, 1.0)
-
-    def pct(ms_abs: float) -> float:
-        return (ms_abs - axis_start_ms) / span * 100.0
-
-    def make_row(tc: TestCase, extra_cls: str, title: str) -> dict:
-        left = pct(_ts_to_ms(tc.start_time))
-        right = pct(_ts_to_ms(tc.end_time))
-        cls = f"{_result_class(tc.result)} {extra_cls}".strip()
-        return {
-            "name": tc.display_name,
-            "thread": tc.thread_name,
-            "result": tc.result,
-            "cls": cls,
-            "left": round(left, 3),
-            "width": round(max(right - left, 0.4), 3),  # минимум для видимости
-            "title": title,
-        }
-
     rows: list[dict] = []
+    rows.append(_make_row(main, axis_start_ms, axis_end_ms, extra_cls="highlight"))
 
-    # 1) Искомый тест — сверху, с рамкой
-    rows.append(make_row(
-        main,
-        extra_cls="highlight",
-        title=f"{main.display_name} [{main.thread_name}] "
-              f"result={main.result} "
-              f"{main.duration.total_seconds() * 1000:.1f} ms",
-    ))
-
-    # 2) Каждый партнёр — на своей строке
     for ov in partners:
-        other = ov.other
-        rows.append(make_row(
-            other,
-            extra_cls="",
-            title=f"{other.display_name} [{other.thread_name}] "
-                  f"result={other.result} "
-                  f"пересечение {ov.intersection_ms:.1f} ms",
+        rows.append(_make_row(
+            ov.other,
+            axis_start_ms,
+            axis_end_ms,
+            extra_title=f"пересечение {ov.intersection_ms:.1f} ms",
         ))
-
     return rows
 
 
+def _all_unique_tests() -> list[TestCase]:
+    """Возвращает список уникальных тестов из ALL_EVENTS (по display_name)."""
+    seen = set()
+    result = []
+    for tc in ALL_EVENTS:
+        if tc.display_name not in seen:
+            seen.add(tc.display_name)
+            result.append(tc)
+    return result
+
+
 def _build_group_timeline(test_names: list[str]) -> dict:
-    """Строит таймлайн для группы выбранных тестов."""
+    """Строит таймлайн для группы выбранных тестов из ALL_EVENTS."""
     if not test_names or GLOBAL_MIN is None or GLOBAL_MAX is None:
         return {"rows": [], "axis_start": "", "axis_end": ""}
 
     axis_start = _ts_to_ms(GLOBAL_MIN)
     axis_end = _ts_to_ms(GLOBAL_MAX)
-    span = max(axis_end - axis_start, 1.0)
 
-    # Собираем все тесты по именам
-    tests_to_show: list[TestCase] = []
-    seen = set()
-
-    for test in OVERLAP_DICT.keys():
-        if test.display_name in test_names and test.display_name not in seen:
-            tests_to_show.append(test)
-            seen.add(test.display_name)
-
-    # Сортируем по времени начала
+    wanted = set(test_names)
+    tests_to_show = [tc for tc in _all_unique_tests() if tc.display_name in wanted]
     tests_to_show.sort(key=lambda t: t.start_time)
 
-    def pct(ms_abs: float) -> float:
-        return (ms_abs - axis_start) / span * 100.0
-
-    rows = []
-    for tc in tests_to_show:
-        left = pct(_ts_to_ms(tc.start_time))
-        right = pct(_ts_to_ms(tc.end_time))
-        rows.append({
-            "name": tc.display_name,
-            "thread": tc.thread_name,
-            "result": tc.result,
-            "cls": _result_class(tc.result),
-            "left": round(left, 3),
-            "width": round(max(right - left, 0.4), 3),
-            "title": f"{tc.display_name} [{tc.thread_name}] "
-                     f"result={tc.result} "
-                     f"{tc.duration.total_seconds() * 1000:.1f} ms",
-        })
+    rows = [_make_row(tc, axis_start, axis_end) for tc in tests_to_show]
 
     return {
         "rows": rows,
@@ -628,17 +674,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def _all_tests(self):
-        """Возвращает список всех тестов для выбора в группу."""
+        """Возвращает список ВСЕХ тестов из ALL_EVENTS (включая те, что без пересечений)."""
         result = []
-        seen = set()
-        for test in OVERLAP_DICT.keys():
-            if test.display_name not in seen:
-                seen.add(test.display_name)
-                result.append({
-                    "name": test.display_name,
-                    "thread": test.thread_name,
-                    "result": test.result,
-                })
+        for tc in _all_unique_tests():
+            result.append({
+                "name": tc.display_name,
+                "thread": tc.thread_name,
+                "result": tc.result,
+            })
         result.sort(key=lambda x: x["name"])
         return result
 
@@ -650,9 +693,13 @@ class Handler(BaseHTTPRequestHandler):
         axis_end = _ts_to_ms(GLOBAL_MAX)
 
         result = []
+        matched_names = set()
+
+        # 1) Тесты с пересечениями (из OVERLAP_DICT)
         for test, partners in OVERLAP_DICT.items():
             if query not in test.display_name.lower():
                 continue
+            matched_names.add(test.display_name)
 
             partners_json = [
                 {
@@ -674,7 +721,31 @@ class Handler(BaseHTTPRequestHandler):
                 "axis_end": _fmt_dt(GLOBAL_MAX),
             })
 
-        result.sort(key=lambda x: -sum(p["ms"] for p in x["partners"]))
+        # 2) Тесты без пересечений (из ALL_EVENTS), но попадающие в запрос
+        for tc in _all_unique_tests():
+            if tc.display_name in matched_names:
+                continue
+            if query not in tc.display_name.lower():
+                continue
+            matched_names.add(tc.display_name)
+
+            rows = _build_timeline(tc, [], axis_start, axis_end)
+            result.append({
+                "name": tc.display_name,
+                "thread": tc.thread_name,
+                "result": tc.result,
+                "partners": [],
+                "rows": rows,
+                "axis_start": _fmt_dt(GLOBAL_MIN),
+                "axis_end": _fmt_dt(GLOBAL_MAX),
+            })
+
+        # Сортировка: сначала с пересечениями (по сумме мс), потом одиночные
+        def sort_key(x):
+            total = sum(p["ms"] for p in x["partners"])
+            return (-total, x["name"])
+
+        result.sort(key=sort_key)
         return result[:50]
 
     def _send_html(self, html: str):
@@ -706,5 +777,13 @@ def serve(overlap_dict: dict, all_events: list,
         GLOBAL_MIN = min(e.start_time for e in all_events)
         GLOBAL_MAX = max(e.end_time for e in all_events)
 
-    print(f"Open http://{host}:{port}\n")
+    # Отладка
+    names_in_dict = {t.display_name for t in OVERLAP_DICT.keys()}
+    names_in_events = {e.display_name for e in ALL_EVENTS}
+    only_in_events = names_in_events - names_in_dict
+    print(f"  OVERLAP_DICT: {len(OVERLAP_DICT)} тестов с пересечениями")
+    print(f"  ALL_EVENTS:   {len(names_in_events)} уникальных тестов")
+    print(f"  Без пересечений: {len(only_in_events)}")
+
+    print(f"\n  → Откройте http://{host}:{port}\n")
     HTTPServer((host, port), Handler).serve_forever()
