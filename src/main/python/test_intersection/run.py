@@ -8,9 +8,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from jfr_test_intersection import (
-    TestCase, find_overlaps, build_overlap_dict, jfr_to_json, collect_all,
+    TestCase, build_overlap_dict, jfr_to_json, collect_all,
 )
-from jfr_server_test_intersection import serve
+from main import serve
+from timeline import test_key
 
 
 logging.basicConfig(
@@ -21,24 +22,70 @@ logging.basicConfig(
 
 
 def make_demo_events() -> list[TestCase]:
-    """Синтетические тесты для демонстрации таймлайна."""
+    """Синтетические тесты для демонстрации таймлайна.
+
+    У каждого теста есть:
+      - class_name / method_name — из них собирается ключ class_name:method_name:display_name;
+      - display_name — человекочитаемое название для UI ("Login — happy path");
+      - event_type / value_type — как у реальных JFR-событий.
+    """
     base = datetime(2026, 10, 5, 12, 0, 0)
 
-    def tc(name, thread, start_s, dur_s, result="PASSED"):
+    def tc(class_name, method_name, display_name, thread, start_s, dur_s,
+           result="PASSED",
+           event_type="Test",
+           value_type="jdk.jfr.Test"):
         s = base + timedelta(seconds=start_s)
         d = timedelta(seconds=dur_s)
-        return TestCase(name, thread, s, s + d, d, result)
+        return TestCase(
+            class_name=class_name,
+            method_name=method_name,
+            display_name=display_name,
+            thread_name=thread,
+            start_time=s,
+            end_time=s + d,
+            duration=d,
+            result=result,
+            event_type=event_type,
+            value_type=value_type,
+        )
 
     return [
-        tc("test_login",            "worker-1", 0.0,  3.5, "PASSED"),
-        tc("test_payment",          "worker-2", 1.2,  2.0, "FAILED"),   # пересекается с login
-        tc("test_profile",          "worker-1", 2.5,  1.5, "PASSED"),   # пересекается с login и payment
-        tc("test_logout",           "worker-3", 5.0,  1.0, "PASSED"),
-        tc("test_search",           "worker-2", 6.0,  4.0, "FAILED"),
-        tc("test_checkout",         "worker-3", 7.5,  2.0, "PASSED"),   # пересекается с search
-        tc("test_report_generation","worker-1", 9.0,  3.0, "FAILED"),   # пересекается с search и checkout
-        tc("test_cleanup",          "worker-3", 12.5, 1.0, "PASSED"),
-        tc("test_healthcheck",      "worker-2", 12.8, 0.5, "PASSED"),   # микро-пересечение с cleanup
+        tc("LoginTest", "test_login",
+           "Login — happy path",
+           "worker-1", 0.0, 3.5, "PASSED"),
+
+        tc("PaymentTest", "test_payment",
+           "Payment — card declined",
+           "worker-2", 1.2, 2.0, "FAILED"),        # пересекается с login
+
+        tc("ProfileTest", "test_profile",
+           "Profile — update display name",
+           "worker-1", 2.5, 1.5, "PASSED"),        # пересекается с login и payment
+
+        tc("LogoutTest", "test_logout",
+           "Logout — clears session",
+           "worker-3", 5.0, 1.0, "PASSED"),
+
+        tc("SearchTest", "test_search",
+           "Search — full-text query",
+           "worker-2", 6.0, 4.0, "FAILED"),
+
+        tc("CheckoutTest", "test_checkout",
+           "Checkout — guest user",
+           "worker-3", 7.5, 2.0, "PASSED"),        # пересекается с search
+
+        tc("ReportTest", "test_report_generation",
+           "Reports — monthly export",
+           "worker-1", 9.0, 3.0, "FAILED"),        # пересекается с search и checkout
+
+        tc("CleanupTest", "test_cleanup",
+           "Cleanup — temp files",
+           "worker-3", 12.5, 1.0, "PASSED"),
+
+        tc("HealthTest", "test_healthcheck",
+           "Healthcheck — /status ping",
+           "worker-2", 12.8, 0.5, "PASSED"),       # микро-пересечение с cleanup
     ]
 
 
@@ -59,10 +106,14 @@ def main() -> int:
         events = make_demo_events()
 
     print(f"Событий: {len(events)}")
-    overlaps = find_overlaps(events)
-    print(f"Пересекающихся пар: {len(overlaps)}")
 
-    overlap_dict = build_overlap_dict(overlaps)
+    overlap_dict = build_overlap_dict(events)
+    print(f"Пересекающихся пар: {len(overlap_dict)}")
+
+    # Уникальные ключи — через тот же test_key, что и в handler.py / timeline.py.
+    unique_keys = {test_key(e) for e in events}
+    print(f"Уникальных тестов (по ключу): {len(unique_keys)}")
+
     serve(overlap_dict, events)
     return 0
 

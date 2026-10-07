@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Overlap search</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<h1>Поиск пересечений тестов</h1>
+
+<input id="q"
+       placeholder="Поиск по классу, методу или имени теста..."
+       autocomplete="off"
+       autofocus>
+
+<div class="legend">
+  <span style="background:#7bb86f"></span>успешный
+  <span style="background:#e25c4a; margin-left:1rem"></span>упавший
+  <span style="background:#9aa4ad; margin-left:1rem"></span>прочее
+  <span style="border:2px solid #222; width:8px; height:8px; background:transparent; margin-left:1rem"></span>искомый тест
+</div>
+
+<div id="results"></div>
+
+<div class="group-selector">
+  <h3>Таймлайн для группы тестов</h3>
+
+  <div class="multi-select">
+    <input type="text"
+           class="multi-select-input"
+           id="groupInput"
+           placeholder="Выберите тесты (поиск по классу, методу, имени)..."
+           autocomplete="off"
+           readonly>
+
+    <div class="multi-select-dropdown" id="groupDropdown">
+      <div class="multi-select-search">
+        <input type="text"
+               id="groupSearch"
+               placeholder="Поиск..."
+               autocomplete="off"
+               onclick="event.stopPropagation()">
+      </div>
+      <div id="groupOptions"></div>
+    </div>
+  </div>
+
+  <div class="select-actions">
+    <button type="button" id="selectAllBtn">Выбрать все видимые</button>
+    <button type="button" id="clearAllBtn">Очистить</button>
+  </div>
+
+  <div class="selected-tags" id="selectedTags"></div>
+
+  <button type="button" class="build-timeline-btn" id="buildBtn" disabled>
+    Построить таймлайн
+  </button>
+
+  <div id="groupTimeline"></div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
