@@ -8,6 +8,8 @@
 <body>
 <h1>Поиск пересечений тестов</h1>
 
+<!-- ==================== 1. Поиск теста ==================== -->
+
 <input id="q"
        placeholder="Поиск по классу, методу или имени теста..."
        autocomplete="off"
@@ -21,6 +23,8 @@
 </div>
 
 <div id="results"></div>
+
+<!-- ==================== 2. Таймлайн группы тестов ==================== -->
 
 <div class="group-selector">
   <h3>Таймлайн для группы тестов</h3>
@@ -53,10 +57,62 @@
   <div class="selected-tags" id="selectedTags"></div>
 
   <button type="button" class="build-timeline-btn" id="buildBtn" disabled>
-    Построить таймлайн
+    Построить таймлайн тестов
   </button>
 
   <div id="groupTimeline"></div>
+</div>
+
+<!-- ==================== 3. Смешанный таймлайн: тесты + события ==================== -->
+
+<div class="group-selector">
+  <h3>Таймлайн тестов и событий</h3>
+
+  <div class="multi-select">
+    <input type="text"
+           class="multi-select-input"
+           id="mixedTestsInput"
+           placeholder="Выберите тесты (поиск по классу, методу, имени)..."
+           autocomplete="off"
+           readonly>
+
+    <div class="multi-select-dropdown" id="mixedTestsDropdown">
+      <div class="multi-select-search">
+        <input type="text"
+               id="mixedTestsSearch"
+               placeholder="Поиск..."
+               autocomplete="off"
+               onclick="event.stopPropagation()">
+      </div>
+      <div id="mixedTestsOptions"></div>
+    </div>
+  </div>
+
+  <div class="select-actions">
+    <button type="button" id="mixedSelectAllBtn">Выбрать все видимые</button>
+    <button type="button" id="mixedClearAllBtn">Очистить</button>
+  </div>
+
+  <div class="selected-tags" id="mixedSelectedTags"></div>
+
+  <div class="event-types-block">
+    <div class="event-types-header">
+      <strong>Типы событий</strong>
+      <div class="select-actions" style="margin:0">
+        <button type="button" id="eventTypesAllBtn">Все</button>
+        <button type="button" id="eventTypesNoneBtn">Ничего</button>
+      </div>
+    </div>
+    <div class="event-types-list" id="eventTypesList">
+      <div class="empty">Загрузка типов событий...</div>
+    </div>
+  </div>
+
+  <button type="button" class="build-timeline-btn" id="mixedBuildBtn" disabled>
+    Построить смешанный таймлайн
+  </button>
+
+  <div id="mixedTimeline"></div>
 </div>
 
 <script src="/app.js"></script>

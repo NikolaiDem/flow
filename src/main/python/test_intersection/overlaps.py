@@ -4,13 +4,13 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from collections import defaultdict
-from event_parsing import TestCase
+from event_parsing import JfrEvent
 
 log = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 # Поиск пересечений (sweep line, O(n log n))
 # --------------------------------------------------------------------------- #
-def find_overlaps(events: list[TestCase]) -> list[tuple[TestCase, TestCase]]:
+def find_overlaps(events: list[JfrEvent]) -> list[tuple[JfrEvent, JfrEvent]]:
     """
     Возвращает все пары событий, чьи интервалы пересекаются.
 
@@ -25,7 +25,7 @@ def find_overlaps(events: list[TestCase]) -> list[tuple[TestCase, TestCase]]:
     points.sort(key=lambda p: (p[0], p[1]))
 
     active: set[int] = set()
-    overlaps: list[tuple[TestCase, TestCase]] = []
+    overlaps: list[tuple[JfrEvent, JfrEvent]] = []
 
     for _, delta, i in points:
         if delta == 1:
@@ -38,7 +38,7 @@ def find_overlaps(events: list[TestCase]) -> list[tuple[TestCase, TestCase]]:
     return overlaps
 
 
-def calc_intersection_ms(left: TestCase, right: TestCase) -> float:
+def calc_intersection_ms(left: JfrEvent, right: JfrEvent) -> float:
     """Длительность пересечения в миллисекундах (0.0, если пересечения нет)."""
     start = max(left.start_time, right.start_time)
     end = min(left.end_time, right.end_time)
@@ -51,14 +51,14 @@ def calc_intersection_ms(left: TestCase, right: TestCase) -> float:
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True, slots=True)
 class Overlap:
-    other: TestCase
+    other: JfrEvent
     intersection_ms: float
 
 
-def build_overlap_dict(events: list[TestCase]) -> dict[TestCase, list[Overlap]]:
-    """Для каждого TestCase — список пересечений, отсортированный по убыванию ms."""
+def build_overlap_dict(events: list[JfrEvent]) -> dict[JfrEvent, list[Overlap]]:
+    """Для каждого JfrEvent — список пересечений, отсортированный по убыванию ms."""
     overlaps = find_overlaps(events)
-    result: dict[TestCase, list[Overlap]] = defaultdict(list)
+    result: dict[JfrEvent, list[Overlap]] = defaultdict(list)
 
     for left, right in overlaps:
         ms = calc_intersection_ms(left, right)
