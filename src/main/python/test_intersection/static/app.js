@@ -1,17 +1,54 @@
 // =============================================================================
+// app.js — фронтенд таймлайна пересечений тестов.
+//
+// Секции страницы (см. index.html):
+//   1) Поиск одного теста          → GET  /search?q=...
+//   2) Групповой таймлайн тестов   → POST /group-timeline  {keys}
+//   3) Таймлайн событий            → POST /mixed-timeline {event_types}
+//
+// Вспомогательные эндпоинты:
+//   GET /all-tests     — плоский список тестов для мультиселекта
+//   GET /event-types   — список {event_type, count} для чекбоксов
+//
+// Общий принцип: каждая секция независима. Ошибки одной не ломают другие.
+// =============================================================================
+
+
+// =============================================================================
 // Общие утилиты
 // =============================================================================
 
+/**
+ * Экранирование для безопасной вставки в innerHTML.
+ *
+ * Зачем нужно: данные приходят с бэкенда (display_name, class_name и т.п.)
+ * и могут содержать <, >, &, кавычки. Если вставить их «как есть» — получим
+ * XSS или сломанную разметку. Всегда пропускаем через escapeHtml перед вставкой.
+ *
+ * null/undefined превращаем в пустую строку, чтобы не получить "null" в UI.
+ */
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
 }
 
+/** То же для значений атрибутов (data-key, title). */
 function escapeAttr(s) {
   return escapeHtml(s);
 }
 
+/**
+ * CSS-класс для статуса теста.
+ *
+ * Используется и как класс бейджа (<span class="status passed">),
+ * и как класс бара (<div class="bar failed">).
+ *
+ * Правила:
+ *   PASSED / SUCCESS / SUCCESSFUL → "passed"  (зелёный)
+ *   FAILED / FAILURE / ERROR      → "failed"  (красный)
+ *   всё остальное                 → "other"   (серый)
+ */
 function statusClass(result) {
   const r = String(result || '').toUpperCase();
   if (r === 'PASSED' || r === 'SUCCESS' || r === 'SUCCESSFUL') return 'passed';
@@ -19,6 +56,12 @@ function statusClass(result) {
   return 'other';
 }
 
+/**
+ * Человекочитаемая подпись теста.
+ *
+ * "Class.method", либо одна из частей, либо name, если ни class_name,
+ * ни method_name не заполнены. Используется в мультиселекте и тегах.
+ */
 function testLabel(t) {
   const cls = t.class_name || '';
   const mth = t.method_name || '';
@@ -28,6 +71,14 @@ function testLabel(t) {
   return t.name || '';
 }
 
+/**
+ * Вертикальные засечки внутри дорожки (без подписей).
+ *
+ * ticks — массив {left: 0..100, label: "HH:MM:SS"} с бэкенда.
+ * Каждая 5-я и последняя засечки получают класс "major" (чуть темнее в CSS).
+ *
+ * pointer-events: none в CSS — мышь проходит сквозь линии, тултипы баров работают.
+ */
 function renderTicks(ticks) {
   if (!ticks || !ticks.length) return '';
   const last = ticks.length - 1;
@@ -37,6 +88,17 @@ function renderTicks(ticks) {
   }).join('');
 }
 
+/**
+ * Единый слой подписей засечек под таймлайном.
+ *
+ * Рисуется один раз на карточку, а не в каждой строке — так подписи
+ * не дублируются и не мешают барам.
+ *
+ * Крайние подписи прижимаются к краям через transform:
+ *   i=0        → translateX(0)     (левая подпись не уезжает влево)
+ *   i=last     → translateX(-100%) (правая не уезжает вправо)
+ *   остальные  → translateX(-50%)  (центрируем по засечке)
+ */
 function renderTicksAxis(ticks) {
   if (!ticks || !ticks.length) return '';
   const last = ticks.length - 1;
@@ -57,14 +119,37 @@ function renderTicksAxis(ticks) {
   `;
 }
 
+
 // =============================================================================
 // Глобальное состояние
 // =============================================================================
 
-let allTests = [];                       // заполняется loadAllTests()
-const eventTypesAll = [];                // [{event_type, count}, ...]
+/**
+ * allTests — плоский список всех тестов из /all-tests.
+ * Используется обеими фабриками мультиселекта (секция 2 и, потенциально, 3).
+ * Заполняется один раз в loadAllTests().
+ */
+let allTests = [];
+
+/**
+ * eventTypesAll — [{event_type: "org.junit.TestExecution", count: 9}, ...]
+ * из /event-types. Используется для рендера чекбоксов в секции 3.
+ */
+const eventTypesAll = [];
+
+/**
+ * selectedEventTypes — Set выбранных event_type (значения чекбоксов).
+ * Активность кнопки «Построить таймлайн событий» зависит от его размера.
+ */
 const selectedEventTypes = new Set();
 
+/**
+ * Загрузка списка тестов.
+ *
+ * Проверяем, что пришёл массив — иначе UI будет падать на allTests.filter.
+ * При ошибке ставим пустой массив: дропдаун покажет «Тесты не загружены»,
+ * остальная страница продолжит работать.
+ */
 async function loadAllTests() {
   try {
     const r = await fetch('/all-tests');
@@ -82,6 +167,12 @@ async function loadAllTests() {
   }
 }
 
+/**
+ * Загрузка типов событий для чекбоксов секции 3.
+ *
+ * Формат: [{event_type, count}, ...] — count для подписи "N шт." справа.
+ * Если сервер вернул не массив — не трогаем eventTypesAll.
+ */
 async function loadEventTypes() {
   try {
     const r = await fetch('/event-types');
@@ -98,19 +189,30 @@ async function loadEventTypes() {
   }
 }
 
+
 // =============================================================================
 // Секция 1. Поиск одного теста
+//
+// Пользователь печатает в #q. С дебаунсом 150 мс летит GET /search?q=...
+// Бэкенд возвращает массив карточек: [{key, class_name, method_name, thread,
+// result, rows, partners, ticks, axis_start, axis_end}, ...].
 // =============================================================================
 
 const q = document.getElementById('q');
 const results = document.getElementById('results');
 let searchTimer = null;
 
+// Дебаунс: не отправлять запрос на каждый набранный символ.
+// Ждём 150 мс тишины после последнего нажатия — тогда searchOne().
 q.addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(searchOne, 150);
 });
 
+/**
+ * Запрос к /search и рендер результатов.
+ * Пустой запрос очищает результаты без обращения к серверу.
+ */
 async function searchOne() {
   const query = q.value.trim();
   if (!query) { results.innerHTML = ''; return; }
@@ -123,6 +225,18 @@ async function searchOne() {
   }
 }
 
+/**
+ * Рендер карточек поиска.
+ *
+ * Каждая карточка:
+ *   - шапка (.name): "Class.method  name [thread]  PASSED"
+ *   - таймлайн: строки с барами (искомый тест сверху + его партнёры)
+ *   - axis: подписи засечек под дорожками
+ *   - список партнёров: name [thread] status — X ms
+ *
+ * Если партнёров нет — показываем "Пересечений не найдено".
+ * Всё, что приходит из данных, проходит через escapeHtml.
+ */
 function renderSearchResults(items) {
   if (!items.length) {
     results.innerHTML = '<div class="empty">Ничего не найдено</div>';
@@ -170,35 +284,62 @@ function renderSearchResults(items) {
   `).join('');
 }
 
+
 // =============================================================================
-// Фабрика мультиселекта
+// Фабрика мультиселекта тестов
+//
+// Создаёт изолированный компонент: дропдаун с чекбоксами + теги + кнопка
+// «Построить» + контейнер таймлайна. Секция 2 использует один экземпляр,
+// при желании можно создать второй (например, для смешанного таймлайна).
+//
+// Каждый экземпляр держит своё состояние в замыкании:
+//   - selected — Set выбранных ключей (t.key == tc.name)
+//   - visible  — тесты, прошедшие текущий фильтр поиска
 // =============================================================================
 
 function createMultiSelect(cfg) {
   const {
-    inputEl, dropdownEl, searchEl, optionsEl,
-    tagsEl, buildBtnEl, timelineEl,
-    buildUrl,                 // '/group-timeline' | '/mixed-timeline'
-    minSelected,              // 2 для группы; 0 для mixed
-    extraPayload,             // () => ({ event_types: [...] }) для mixed
-    extraValid,               // () => bool — доп. условие активности кнопки
-    titleText,                // заголовок при рендере таймлайна
-    rowFormat,                // 'test' | 'event' — как рисовать подпись строки
+    inputEl, dropdownEl, searchEl, optionsEl,   // элементы дропдауна
+    tagsEl,                                     // контейнер тегов выбранных
+    buildBtnEl, timelineEl,                     // кнопка и контейнер результата
+    buildUrl,                                   // '/group-timeline' и т.п.
+    minSelected,                                // минимум выбранных для активации кнопки
+    extraPayload,                               // () => ({...}) — доп. поля в POST-тело
+    extraValid,                                 // () => bool — доп. условие активности
+    titleText,                                  // заголовок над таймлайном
   } = cfg;
 
+  // Внутреннее состояние компонента.
   const selected = new Set();
   let visible = [];
 
-  // ---- дропдаун ----
+  // ---- Дропдаун ----
+
+  // Клик по полю-«кнопке» переключает .open и уводит фокус в поле поиска.
+  // stopPropagation — чтобы document.click не закрыл дропдаун сразу же.
   inputEl.addEventListener('click', (e) => {
     e.stopPropagation();
     dropdownEl.classList.toggle('open');
     if (dropdownEl.classList.contains('open')) searchEl.focus();
   });
+
+  // Клик по полю поиска не должен закрывать дропдаун.
   searchEl.addEventListener('click', (e) => e.stopPropagation());
+
+  // Фильтрация опций по мере ввода.
   searchEl.addEventListener('input', () => renderOptions(searchEl.value));
 
-  // ---- опции ----
+  // ---- Рендер списка опций ----
+
+  /**
+   * Рисует список тестов с учётом фильтра.
+   *
+   * Фильтр — регистронезависимая подстрока по name, class_name, method_name,
+   * thread и по склейке "Class.method".
+   *
+   * После innerHTML обработчики теряются — поэтому навешиваем их заново
+   * на каждую .multi-select-option.
+   */
   function renderOptions(filter = '') {
     const lower = filter.toLowerCase();
     visible = allTests.filter(t => {
@@ -231,12 +372,14 @@ function createMultiSelect(cfg) {
       </div>
     `).join('');
 
+    // Переподключаем обработчики после перерисовки.
     optionsEl.querySelectorAll('.multi-select-option[data-key]').forEach(opt => {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const key = opt.dataset.key;
         if (selected.has(key)) selected.delete(key);
         else selected.add(key);
+        // После изменения выбора — перерисовать всё, что зависит от selected.
         renderOptions(searchEl.value);
         renderTags();
         updateButton();
@@ -244,7 +387,12 @@ function createMultiSelect(cfg) {
     });
   }
 
-  // ---- теги ----
+  // ---- Теги выбранных ----
+
+  /**
+   * Рендер тегов выбранных тестов под дропдауном.
+   * Каждый тег — плашка с крестиком для удаления.
+   */
   function renderTags() {
     tagsEl.innerHTML = Array.from(selected).map(key => {
       const t = allTests.find(x => x.key === key);
@@ -262,6 +410,7 @@ function createMultiSelect(cfg) {
     });
   }
 
+  /** Удаление теста из выбранных (по крестику в теге). */
   function remove(key) {
     selected.delete(key);
     renderOptions(searchEl.value);
@@ -269,14 +418,24 @@ function createMultiSelect(cfg) {
     updateButton();
   }
 
-  // ---- активность кнопки ----
+  // ---- Активность кнопки «Построить» ----
+
+  /**
+   * Кнопка активна, если:
+   *   - выбрано минимум minSelected тестов;
+   *   - extraValid() === true (если он задан).
+   *
+   * Например, для группы тестов minSelected = 2.
+   */
   function updateButton() {
     const enoughSelected = selected.size >= minSelected;
     const extra = extraValid ? extraValid() : true;
     buildBtnEl.disabled = !(enoughSelected && extra);
   }
 
-  // ---- массовые действия ----
+  // ---- Массовые действия ----
+
+  /** «Выбрать все видимые» — все, что сейчас в списке после фильтра. */
   function selectAllVisible() {
     visible.forEach(t => selected.add(t.key));
     renderOptions(searchEl.value);
@@ -284,6 +443,7 @@ function createMultiSelect(cfg) {
     updateButton();
   }
 
+  /** «Очистить» — сбросить всё выбранное. */
   function clearAll() {
     selected.clear();
     renderOptions(searchEl.value);
@@ -291,7 +451,17 @@ function createMultiSelect(cfg) {
     updateButton();
   }
 
-  // ---- отправка ----
+  // ---- Отправка запроса ----
+
+  /**
+   * Собирает payload и делает POST на buildUrl.
+   *
+   * Всегда кладём keys и test_keys (для совместимости с /group-timeline
+   * и /mixed-timeline), плюс extraPayload() — например, event_types.
+   *
+   * Пока идёт запрос — показываем плейсхолдер «Строим таймлайн...».
+   * Если кнопка disabled — не отправляем (защита от повторных кликов).
+   */
   async function build() {
     if (buildBtnEl.disabled) {
       console.warn('build: кнопка disabled, запрос не отправлен');
@@ -299,8 +469,8 @@ function createMultiSelect(cfg) {
     }
 
     const payload = {
-      keys: Array.from(selected),        // /group-timeline
-      test_keys: Array.from(selected),   // /mixed-timeline
+      keys: Array.from(selected),
+      test_keys: Array.from(selected),
       ...(extraPayload ? extraPayload() : {}),
     };
 
@@ -318,7 +488,17 @@ function createMultiSelect(cfg) {
     }
   }
 
-  // ---- рендер таймлайна ----
+  // ---- Рендер результата ----
+
+  /**
+   * Рендер таймлайна тестов.
+   *
+   * Формат строк (из test_timeline.make_row):
+   *   {key, name, class_name, method_name, thread, result,
+   *    cls, left, width, title}
+   *
+   * Плюс общий data.ticks для шкалы.
+   */
   function renderTimeline(data) {
     if (!data.rows || !data.rows.length) {
       timelineEl.innerHTML = '<div class="empty">Нет данных для отображения</div>';
@@ -336,23 +516,14 @@ function createMultiSelect(cfg) {
     `;
   }
 
-  // ---- одна строка ----
+  /**
+   * Одна строка таймлайна теста.
+   * Подпись: "Class.method  name [thread]".
+   * Бар: absolute-элемент с left/width в процентах, класс r.cls (passed/failed/other).
+   */
   function renderRow(r, ticks) {
-    let labelHtml;
-    let subHtml;
-
-    if (rowFormat === 'test') {
-      // секция 2: только тесты, есть class_name/method_name/result
-      labelHtml = `${escapeHtml(r.class_name)}.${escapeHtml(r.method_name)}`;
-      subHtml = `<span class="threads">${escapeHtml(r.name)} [${escapeHtml(r.thread)}]</span>`;
-    } else {
-      // секция 3: единый формат JfrEvent — только display_name/event_type/thread
-      labelHtml = `${escapeHtml(r.display_name || r.name || '')}`;
-      subHtml = `
-        <span class="threads">[${escapeHtml(r.thread || '')}]</span>
-        <span class="threads">${escapeHtml(r.event_type || '')}</span>
-      `;
-    }
+    const labelHtml = `${escapeHtml(r.class_name)}.${escapeHtml(r.method_name)}`;
+    const subHtml = `<span class="threads">${escapeHtml(r.name)} [${escapeHtml(r.thread)}]</span>`;
 
     return `
       <div class="row">
@@ -370,6 +541,7 @@ function createMultiSelect(cfg) {
     `;
   }
 
+  // Публичный интерфейс компонента (наружу отдаём только это).
   return {
     renderOptions,
     renderTags,
@@ -381,8 +553,14 @@ function createMultiSelect(cfg) {
   };
 }
 
+
 // =============================================================================
 // Секция 2. Групповой таймлайн тестов
+//
+// Один экземпляр createMultiSelect:
+//   - источник — allTests (заполняется loadAllTests)
+//   - buildUrl — /group-timeline
+//   - minSelected = 2 (для группы нужно минимум 2 теста)
 // =============================================================================
 
 const groupMulti = createMultiSelect({
@@ -396,47 +574,129 @@ const groupMulti = createMultiSelect({
   buildUrl:   '/group-timeline',
   minSelected: 2,
   titleText:  'Таймлайн группы тестов',
-  rowFormat:  'test',
 });
 
+// Кнопки массовых действий и построения.
 document.getElementById('selectAllBtn')
   .addEventListener('click', () => groupMulti.selectAllVisible());
 document.getElementById('clearAllBtn')
   .addEventListener('click', () => groupMulti.clearAll());
+document.getElementById('buildBtn')
+  .addEventListener('click', () => groupMulti.build());
+
 
 // =============================================================================
-// Секция 3. Смешанный таймлайн: тесты + типы событий
+// Секция 3. Таймлайн событий (только JfrEvent)
+//
+// Работает по выбранным event_type. Мультиселект тестов в этой секции
+// не используется: рендер идёт по всем событиям подходящих типов, без
+// объединения с тестами.
+//
+// Формат строк (из events_timeline.make_row):
+//   {key, name, display_name, thread, event_type, cls, left, width, title}
 // =============================================================================
 
-const mixedMulti = createMultiSelect({
-  inputEl:    document.getElementById('mixedTestsInput'),
-  dropdownEl: document.getElementById('mixedTestsDropdown'),
-  searchEl:   document.getElementById('mixedTestsSearch'),
-  optionsEl:  document.getElementById('mixedTestsOptions'),
-  tagsEl:     document.getElementById('mixedSelectedTags'),
-  buildBtnEl: document.getElementById('mixedBuildBtn'),
-  timelineEl: document.getElementById('mixedTimeline'),
-  buildUrl:   '/mixed-timeline',
-  minSelected: 0,
-  extraValid: () => selectedEventTypes.size > 0 || mixedMulti.selected.size > 0,
-  extraPayload: () => ({ event_types: Array.from(selectedEventTypes) }),
-  titleText:  'Смешанный таймлайн (тесты + события)',
-  rowFormat:  'event',
-});
+const eventsTimelineEl = document.getElementById('mixedTimeline');
+const eventsBuildBtn = document.getElementById('mixedBuildBtn');
 
-document.getElementById('mixedSelectAllBtn')
-  .addEventListener('click', () => mixedMulti.selectAllVisible());
-document.getElementById('mixedClearAllBtn')
-  .addEventListener('click', () => mixedMulti.clearAll());
+/**
+ * Рендер таймлайна событий.
+ *
+ * Единый шаблон: "display_name [thread] event_type".
+ * Никаких class_name/method_name/result — их в этой модели нет.
+ */
+function renderEventTimeline(data) {
+  if (!data.rows || !data.rows.length) {
+    eventsTimelineEl.innerHTML = '<div class="empty">Нет данных для отображения</div>';
+    return;
+  }
+
+  eventsTimelineEl.innerHTML = `
+    <div class="item" style="margin-top:1rem">
+      <div class="name">Таймлайн событий (${data.rows.length} шт.)</div>
+      <div class="timeline">
+        ${data.rows.map(r => `
+          <div class="row">
+            <div class="row-label" title="${escapeAttr(r.title)}">
+              ${escapeHtml(r.display_name || r.name || '')}
+              <span class="threads">[${escapeHtml(r.thread || '')}]</span>
+              <span class="threads">${escapeHtml(r.event_type || '')}</span>
+            </div>
+            <div class="row-track">
+              ${renderTicks(data.ticks)}
+              <div class="bar ${r.cls}"
+                   style="left:${r.left}%; width:${r.width}%"
+                   title="${escapeAttr(r.title)}"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      ${renderTicksAxis(data.ticks)}
+    </div>
+  `;
+}
+
+/**
+ * Отправка POST /mixed-timeline с выбранными event_types.
+ *
+ * Кнопка активна только когда есть хотя бы один выбранный тип
+ * (см. updateEventBuildBtn). Здесь — дополнительная защита.
+ */
+async function buildEventTimeline() {
+  const types = Array.from(selectedEventTypes);
+  if (!types.length) {
+    console.warn('buildEventTimeline: не выбрано ни одного типа события');
+    return;
+  }
+
+  eventsTimelineEl.innerHTML = '<div class="empty">Строим таймлайн...</div>';
+  try {
+    const r = await fetch('/mixed-timeline', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ event_types: types }),
+    });
+    const data = await r.json();
+    renderEventTimeline(data);
+  } catch (e) {
+    eventsTimelineEl.innerHTML = '<div class="empty">Ошибка: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+eventsBuildBtn.addEventListener('click', buildEventTimeline);
+
 
 // =============================================================================
-// Чекбоксы типов событий
+// Чекбоксы типов событий (секция 3)
+//
+// eventTypesAll      — заполняется из /event-types
+// selectedEventTypes — Set выбранных типов
+// #mixedBuildBtn активна, если selectedEventTypes.size > 0
 // =============================================================================
 
 const eventTypesList = document.getElementById('eventTypesList');
 const eventTypesAllBtn = document.getElementById('eventTypesAllBtn');
 const eventTypesNoneBtn = document.getElementById('eventTypesNoneBtn');
 
+/** Кнопка «Построить таймлайн событий» активна, если выбран хоть один тип. */
+function updateEventBuildBtn() {
+  eventsBuildBtn.disabled = selectedEventTypes.size === 0;
+}
+
+/**
+ * Рендер списка чекбоксов типов событий.
+ *
+ * Формат строки:
+ *   <label>
+ *     <input type="checkbox" value="org.junit.TestExecution">
+ *     <span>org.junit.TestExecution</span>
+ *     <span class="count">9</span>
+ *   </label>
+ *
+ * После innerHTML обработчики навешиваются заново.
+ * Клик по чекбоксу добавляет/удаляет значение из selectedEventTypes
+ * и обновляет активность кнопки.
+ */
 function renderEventTypes() {
   if (!eventTypesAll.length) {
     eventTypesList.innerHTML = '<div class="empty">Типов событий не найдено</div>';
@@ -455,44 +715,55 @@ function renderEventTypes() {
     cb.addEventListener('change', () => {
       if (cb.checked) selectedEventTypes.add(cb.value);
       else selectedEventTypes.delete(cb.value);
-      mixedMulti.updateButton();
+      updateEventBuildBtn();
     });
   });
 }
 
+// «Все» — отметить все типы и перерисовать список.
 eventTypesAllBtn.addEventListener('click', () => {
   eventTypesAll.forEach(et => selectedEventTypes.add(et.event_type));
   renderEventTypes();
-  mixedMulti.updateButton();
+  updateEventBuildBtn();
 });
 
+// «Ничего» — снять все типы.
 eventTypesNoneBtn.addEventListener('click', () => {
   selectedEventTypes.clear();
   renderEventTypes();
-  mixedMulti.updateButton();
+  updateEventBuildBtn();
 });
 
+
 // =============================================================================
-// Закрытие дропдаунов по клику вне
+// Закрытие дропдауна по клику вне .multi-select
+//
+// Единый обработчик на document. Если клик вне .multi-select — закрываем
+// дропдаун секции 2. Других активных дропдаунов сейчас нет.
 // =============================================================================
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.multi-select')) {
     document.getElementById('groupDropdown').classList.remove('open');
-    document.getElementById('mixedTestsDropdown').classList.remove('open');
   }
 });
 
+
 // =============================================================================
 // Инициализация
+//
+// Порядок:
+//   1) Параллельно грузим тесты и типы событий.
+//   2) Рисуем опции мультиселекта (иначе дропдаун будет пустым).
+//   3) Рисуем чекбоксы типов событий.
+//   4) Обновляем состояние обеих кнопок по фактическому состоянию.
 // =============================================================================
 
 (async function init() {
   await Promise.all([loadAllTests(), loadEventTypes()]);
 
   groupMulti.renderOptions();
-  mixedMulti.renderOptions();
   renderEventTypes();
   groupMulti.updateButton();
-  mixedMulti.updateButton();
+  updateEventBuildBtn();
 })();

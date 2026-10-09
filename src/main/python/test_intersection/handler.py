@@ -16,6 +16,7 @@ from test_events import TestCase
 from test_timeline import (
     build_group_timeline_by_keys as build_tests_group,
     build_timeline as build_tests_timeline,
+    make_row as make_test_row,
     test_key,
 )
 from events_timeline import (
@@ -40,7 +41,7 @@ def _lower(s) -> str:
 
 def _test_brief(tc: TestCase) -> dict:
     return {
-        "key": test_key(tc),              # == tc.name
+        "key": test_key(tc),
         "name": tc.name,
         "display_name": tc.display_name,
         "class_name": tc.class_name,
@@ -92,7 +93,6 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # статика
         if path in ("/", "/index.html"):
             self._send_static("index.html", "text/html; charset=utf-8")
         elif path == "/style.css":
@@ -100,14 +100,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/app.js":
             self._send_static("app.js", "application/javascript; charset=utf-8")
 
-        # тесты
         elif path == "/all-tests":
             self._send_json(self._all_tests())
         elif path == "/search":
             q = parse_qs(parsed.query).get("q", [""])[0].strip().lower()
             self._send_json(self._search_tests(q))
 
-        # события
         elif path == "/all-events":
             self._send_json(self._all_events())
         elif path == "/search-events":
@@ -246,6 +244,7 @@ class Handler(BaseHTTPRequestHandler):
         result: list[dict] = []
         matched: set[str] = set()
 
+        # 1) события с пересечениями
         for ev, partners in g.OVERLAP_DICT.items():
             if not _event_matches(ev, query):
                 continue
@@ -268,6 +267,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ticks": ticks,
             })
 
+        # 2) события без пересечений
         for ev in g.ALL_EVENTS:
             k = event_key(ev)
             if k in matched:
@@ -308,19 +308,15 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- mixed ----------
 
     def _mixed_timeline(self, test_keys: list[str], event_types: list[str]) -> dict:
-        """Смешанный таймлайн: тесты и события в едином формате JfrEvent.
+        """Смешанный таймлайн: все события выбранных типов, единый формат JfrEvent.
 
-        - test_keys:  список tc.name (пустой — тестов нет);
-        - event_types: список event_type (пустой — событий нет);
-        - оба пусты — пустой таймлайн.
+        test_keys игнорируется — секция работает только с событиями.
         """
         if g.GLOBAL_MIN is None or g.GLOBAL_MAX is None:
             return {"rows": [], "axis_start": "", "axis_end": "", "ticks": []}
 
-        wanted_tests = set(test_keys)
         wanted_types = set(event_types)
-
-        if not wanted_tests and not wanted_types:
+        if not wanted_types:
             return {"rows": [], "axis_start": "", "axis_end": "", "ticks": []}
 
         axis_start = ts_to_ms(g.GLOBAL_MIN)
@@ -328,23 +324,10 @@ class Handler(BaseHTTPRequestHandler):
         ticks = make_ticks(axis_start, axis_end, n=10)
 
         rows: list[dict] = []
-
-        # тесты — рендерим как обычные JfrEvent
-        if wanted_tests:
-            for tc in g.TEST_EVENTS:
-                if tc.name not in wanted_tests:
-                    continue
-                rows.append(make_event_row(tc, axis_start, axis_end))
-
-        # события выбранных типов
-        if wanted_types:
-            for ev in g.ALL_EVENTS:
-                if not ev.event_type or ev.event_type not in wanted_types:
-                    continue
-                # тест, уже добавленный через test_keys, не дублируем
-                if isinstance(ev, TestCase) and ev.name in wanted_tests:
-                    continue
-                rows.append(make_event_row(ev, axis_start, axis_end))
+        for ev in g.ALL_EVENTS:
+            if not ev.event_type or ev.event_type not in wanted_types:
+                continue
+            rows.append(make_event_row(ev, axis_start, axis_end))
 
         rows.sort(key=lambda r: r["left"])
 
@@ -354,8 +337,6 @@ class Handler(BaseHTTPRequestHandler):
             "axis_end": fmt_dt(g.GLOBAL_MAX),
             "ticks": ticks,
         }
-
-    # ---------- IO ----------
 
     def _send_static(self, filename: str, content_type: str):
         file_path = BASE_DIR / "static" / filename
