@@ -8,7 +8,7 @@ from urllib.parse import urlparse, parse_qs
 
 import globals as g
 
-from timeline_common import fmt_dt, make_ticks, ts_to_ms
+from timeline_common import fmt_dt, make_ticks, ts_to_ms, result_class
 
 from event_parsing import JfrEvent
 from test_events import TestCase
@@ -25,6 +25,8 @@ from events_timeline import (
     event_key,
     make_row as make_event_row,
 )
+
+from collections import defaultdict
 
 from stats.test_stats import TestStats
 from stats.stats_hist import build_linear_histogram, build_log_histogram
@@ -102,6 +104,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static("style.css", "text/css; charset=utf-8")
         elif path == "/app.js":
             self._send_static("app.js", "application/javascript; charset=utf-8")
+        elif path == "/threads.js":
+            self._send_static("threads.js", "application/javascript; charset=utf-8")
 
         elif path == "/all-tests":
             self._send_json(self._all_tests())
@@ -123,6 +127,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static("stats.js", "application/javascript; charset=utf-8")
         elif path == "/test-stats":
             self._send_json(self._test_stats())
+
+        elif path == "/threads-timeline":
+            self._send_json(self._threads_timeline())
 
         else:
             self.send_error(404)
@@ -415,4 +422,78 @@ class Handler(BaseHTTPRequestHandler):
             "hist_linear": hist_linear,
             "hist_log": hist_log,
             "by_thread": by_thread,
+        }
+
+    def event_class(self, tc: JfrEvent) -> str:
+        t = (tc.event_type or "").lower()
+
+        if "springframework" in t:
+            return "context"
+
+        if t.startswith("org.junit"):
+            result = getattr(tc, "result", "") or ""
+            if result:
+                return result_class(result)  # ← вот здесь как раз passed/failed
+            return "test-event"
+
+        if t.startswith("jdk."):
+            ...
+            return "jfr-system"
+
+        return "event"
+
+    def _threads_timeline(self) -> dict:
+        """Таймлайн всех событий, сгруппированных по потокам.
+
+        Событие описывается полями JfrEvent: name, display_name, thread_name,
+        start_time, end_time, event_type. Никаких class_name/method_name/result.
+        """
+        if not g.ALL_EVENTS or g.GLOBAL_MIN is None or g.GLOBAL_MAX is None:
+            return {
+                "threads": [], "ticks": [],
+                "axis_start": "", "axis_end": "",
+                "axis_start_ms": 0, "axis_end_ms": 0,
+            }
+
+        axis_start = ts_to_ms(g.GLOBAL_MIN)
+        axis_end = ts_to_ms(g.GLOBAL_MAX)
+        span = max(axis_end - axis_start, 1.0)
+
+        by_thread: dict[str, list] = defaultdict(list)
+        for ev in g.ALL_EVENTS:
+            by_thread[ev.thread_name or "<unknown>"].append(ev)
+
+        threads_data = []
+        for thread_name, events in by_thread.items():
+            events.sort(key=lambda e: e.start_time)
+            rows = []
+            for ev in events:
+                left = (ts_to_ms(ev.start_time) - axis_start) / span * 100.0
+                right = (ts_to_ms(ev.end_time) - axis_start) / span * 100.0
+                width = max(right - left, 0.02)  # совсем тонкие события
+                rows.append({
+                    "key": event_key(ev),
+                    "name": ev.name,
+                    "display_name": ev.display_name,
+                    "event_type": ev.event_type,
+                    "left": round(left, 4),
+                    "width": round(width, 4),
+                    "cls": self.event_class(ev),
+                })
+            threads_data.append({
+                "name": thread_name,
+                "count": len(rows),
+                "events": rows,
+            })
+
+        threads_data.sort(key=lambda t: -t["count"])
+        print(threads_data)
+
+        return {
+            "axis_start_ms": axis_start,
+            "axis_end_ms": axis_end,
+            "axis_start": fmt_dt(g.GLOBAL_MIN),
+            "axis_end": fmt_dt(g.GLOBAL_MAX),
+            "ticks": make_ticks(axis_start, axis_end, n=20),
+            "threads": threads_data,
         }

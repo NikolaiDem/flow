@@ -295,6 +295,19 @@
   <div id="mixedTimeline"></div>
 </div>
 
+<div class="timeline-toolbar">
+  <input id="tlSearch" placeholder="Найти тест по имени..." autocomplete="off">
+  <button type="button" id="tlZoomReset">Сбросить зум</button>
+  <span id="tlZoomInfo" class="zoom-info"></span>
+</div>
+
+<div class="timeline-scroll" id="tlScroll">
+  <div class="timeline-inner" id="tlInner">
+    <div id="tlThreads"></div>
+    <div id="tlAxis"></div>
+  </div>
+</div>
+
 
 <!--
   Подключение JS в самом низу <body>:
@@ -313,5 +326,6 @@
     5. updateButton() / updateEventBuildBtn() — активирует кнопки по состоянию
 -->
 <script src="/app.js"></script>
+<script src="/threads.js"></script>
 </body>
 </html>

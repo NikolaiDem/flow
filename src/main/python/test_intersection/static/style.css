@@ -365,3 +365,106 @@ input { width: 100%; padding: .6rem; font-size: 1rem; box-sizing: border-box; }
   font-family: ui-monospace, monospace;
   font-size: .8rem;
 }
+
+/* контейнер таймлайна */
+.timeline-scroll {
+  position: relative;
+  overflow-x: hidden;      /* горизонтальный скролл заменён логикой зума */
+  overflow-y: auto;
+  max-height: 70vh;
+  border: 1px solid #ddd;
+  background: #fafbfc;
+}
+
+.tl-row {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  border-bottom: 1px solid #eef1f4;
+}
+.tl-row:last-child { border-bottom: none; }
+
+.tl-row-label {
+  width: 220px;
+  flex: 0 0 220px;
+  font-size: .75rem;
+  color: #555;
+  padding: 0 .5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-row-track {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  background: #fff;
+  overflow: hidden;
+}
+
+.tl-axis-inner {
+  position: relative;
+  height: 16px;
+  margin-left: 220px;
+  font-size: 9px;
+  color: #b0b6bc;
+}
+.tl-axis-label {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  line-height: 1;
+}
+
+.timeline-toolbar {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  margin-bottom: .5rem;
+}
+.timeline-toolbar input {
+  flex: 1;
+  padding: .4rem;
+}
+.timeline-toolbar button {
+  padding: .4rem .8rem;
+  cursor: pointer;
+}
+.zoom-info {
+  font-size: .8rem;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Цвета баров ---- */
+/* Тесты по статусу */
+.bar.passed      { background: #2e9e44; }   /* зелёный — успешный тест */
+.bar.failed      { background: #d63a2f; }   /* красный — упавший тест */
+.bar.other       { background: #8a8f98; }   /* серый — прочие результаты */
+
+/* Spring-контекст */
+.bar.context     { background: #3f8fdc; }   /* синий — Spring */
+
+/* JUnit-события (не сами тесты, а сопутствующие TestExecution) */
+.bar.test-event  { background: #7a5fd6; }   /* фиолетовый — JUnit-обвязка */
+
+/* Системные JFR-события — каждый тип свой оттенок */
+.bar.jfr-gc      { background: #2fae91; }   /* бирюзовый — GC */
+.bar.jfr-cpu     { background: #f08c2a; }   /* оранжевый — CPU / samples */
+.bar.jfr-thread  { background: #b048a8; }   /* маджента — потоки */
+.bar.jfr-io      { background: #3ec1e5; }   /* голубой — IO */
+.bar.jfr-system  { background: #c9b23a; }   /* жёлто-оливковый — прочие jdk.* */
+
+/* Совсем неизвестные события */
+.bar.event       { background: #6b7280; }   /* тёмно-серый — фолбэк */
+
+/* Подсветка найденного события */
+.bar.highlight {
+  opacity: 1;
+  outline: 3px solid #111;
+  outline-offset: 0;
+  box-shadow: 0 0 0 2px #fff inset;
+  z-index: 3;
+}
