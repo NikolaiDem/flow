@@ -17,7 +17,8 @@ import spring_events
 
 
 logging.basicConfig(
-    level=logging.INFO,
+    filename="app.log",
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
 )
