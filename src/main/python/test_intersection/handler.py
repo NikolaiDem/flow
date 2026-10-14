@@ -29,7 +29,7 @@ from events_timeline import (
 from collections import defaultdict
 
 from stats.test_stats import TestStats
-from stats.stats_hist import build_linear_histogram, build_log_histogram
+from stats.stats_hist import build_linear_histogram, build_log_histogram, build_cdf
 
 log = logging.getLogger(__name__)
 
@@ -396,6 +396,8 @@ class Handler(BaseHTTPRequestHandler):
             for b in build_log_histogram(stats.durations, bins_per_decade=4)
         ]
 
+        cdf = build_cdf(stats.durations, max_points=500)
+
         by_thread = []
         for name, ts in sorted(
                 stats.by_thread.items(),
@@ -421,6 +423,7 @@ class Handler(BaseHTTPRequestHandler):
             "durations_summary": ds,
             "hist_linear": hist_linear,
             "hist_log": hist_log,
+            "cdf": cdf,
             "by_thread": by_thread,
         }
 
