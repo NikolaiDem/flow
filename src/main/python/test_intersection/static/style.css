@@ -468,3 +468,60 @@ input { width: 100%; padding: .6rem; font-size: 1rem; box-sizing: border-box; }
   box-shadow: 0 0 0 2px #fff inset;
   z-index: 3;
 }
+
+.timeline-toolbar {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  margin-bottom: .5rem;
+}
+.timeline-toolbar input {
+  flex: 1;
+  padding: .4rem;
+}
+.timeline-toolbar button {
+  padding: .35rem .7rem;
+  cursor: pointer;
+  min-width: 36px;
+}
+.zoom-info {
+  font-size: .8rem;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timeline-scroll {
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 60vh;
+  border: 1px solid #ddd;
+  background: #fafbfc;
+  cursor: grab;
+}
+.timeline-scroll:active { cursor: grabbing; }
+
+.timeline-inner { position: relative; }
+
+/* мини-карта */
+.timeline-overview {
+  position: relative;
+  height: 22px;
+  margin-top: 6px;
+  margin-left: 220px;       /* совпадает с .tl-row-label */
+  background: #eef1f4;
+  border: 1px solid #d6dbe0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.timeline-overview-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(63, 143, 220, .25);
+  border: 1px solid #3f8fdc;
+  border-radius: 2px;
+  cursor: grab;
+}
+.timeline-overview-window:active { cursor: grabbing; }

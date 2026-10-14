@@ -2,36 +2,40 @@
 <!--
   index.html — единственная страница UI.
 
-  Состоит из трёх независимых секций:
-    1. Поиск одного теста (одно поле ввода + результаты поиска)
-    2. Таймлайн группы тестов (мультиселект + кнопка + таймлайн)
-    3. Таймлайн событий (чекбоксы типов событий + кнопка + таймлайн)
+  Секции:
+    1. Поиск одного теста          (GET /search?q=...)
+    2. Групповой таймлайн тестов   (POST /group-timeline {keys})
+    3. Таймлайн событий            (POST /mixed-timeline {event_types})
+    4. Таймлайн по потокам         (GET /threads-timeline)
 
-  Вся динамика — в /app.js. Этот файл — только разметка и id-хуки,
-  за которые цепляется JS.
+  Вся динамика — в /app.js и /threads.js. Этот файл — только разметка
+  и id-хуки, за которые цепляются скрипты.
 
-  Каждый id здесь обязан совпадать с document.getElementById(...) в app.js.
-  Если id переименовать, JS получит null и упадёт на addEventListener.
+  Все id здесь обязаны совпадать с document.getElementById(...)
+  в соответствующих js-файлах. Если id переименовать — JS получит null
+  и упадёт на addEventListener.
 -->
 <html lang="ru">
 <head>
-<!-- Кириллица в UI и в данных (display_name тестов, event_type и т.п.). -->
 <meta charset="utf-8">
-<title>Overlap search</title>
+<title>JFR timeline</title>
 
 <!--
   Стили. Отдаётся handler._send_static("style.css", "text/css; ...").
   Содержит:
     - общий layout (.item, .name, .row, .bar, .legend, .group-selector)
-    - цвета баров (.bar.passed / .failed / .other / .event / .context / .test-event)
+    - цвета баров (.bar.passed / .failed / .other / .event / .context /
+      .test-event / .jfr-gc / .jfr-cpu / .jfr-thread / .jfr-io / .jfr-system)
     - верстку мультиселекта (.multi-select*)
     - верстку блока типов событий (.event-types*)
+    - верстку таймлайна по потокам (.timeline-toolbar, .timeline-scroll,
+      .tl-row, .timeline-overview)
 -->
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
-<h1>Поиск пересечений тестов</h1>
+<h1>JFR timeline</h1>
 
 
 <!-- =========================================================================
@@ -39,7 +43,7 @@
      ========================================================================= -->
 
 <!--
-  Поле поиска.
+  Поле поиска теста.
   id="q" — читается в app.js: const q = document.getElementById('q').
   На input навешан дебаунс 150 мс и вызов searchOne().
   searchOne() дёргает GET /search?q=... и рендерит результат в #results.
@@ -50,23 +54,28 @@
        autofocus>
 
 <!--
-  Легенда цветов.
-  Не интерактивная — просто объясняет пользователю, что означают цвета баров.
-  Цвета совпадают с CSS: .bar.passed (#7bb86f), .bar.failed (#e25c4a),
-  .bar.other (#9aa4ad) и .bar.highlight (обводка 2px solid #222).
+  Легенда цветов баров.
+  Не интерактивная — просто объясняет пользователю, что означает цвет.
+  Цвета совпадают с CSS-классами .bar.*.
 -->
 <div class="legend">
-  <span style="background:#7bb86f"></span>успешный
-  <span style="background:#e25c4a; margin-left:1rem"></span>упавший
-  <span style="background:#9aa4ad; margin-left:1rem"></span>прочее
-  <span style="border:2px solid #222; width:8px; height:8px; background:transparent; margin-left:1rem"></span>искомый тест
+  <span style="background:#2e9e44"></span>успешный тест
+  <span style="background:#d63a2f; margin-left:1rem"></span>упавший тест
+  <span style="background:#8a8f98; margin-left:1rem"></span>прочее
+  <span style="background:#3f8fdc; margin-left:1rem"></span>Spring
+  <span style="background:#7a5fd6; margin-left:1rem"></span>JUnit-обвязка
+  <span style="background:#2fae91; margin-left:1rem"></span>GC
+  <span style="background:#f08c2a; margin-left:1rem"></span>CPU
+  <span style="background:#b048a8; margin-left:1rem"></span>потоки
+  <span style="background:#3ec1e5; margin-left:1rem"></span>IO
+  <span style="background:#c9b23a; margin-left:1rem"></span>JFR system
+  <span style="border:3px solid #111; width:8px; height:8px; background:transparent; margin-left:1rem"></span>найденное
 </div>
 
 <!--
   Контейнер результатов поиска.
-  Пустой в HTML — наполняется из renderSearchResults(items).
+  Пустой — наполняется из renderSearchResults(items).
   Каждый item — карточка: имя теста + таймлайн + список пересечений.
-  Если ничего не найдено, app.js покажет <div class="empty">Ничего не найдено</div>.
 -->
 <div id="results"></div>
 
@@ -75,27 +84,11 @@
      СЕКЦИЯ 2. Групповой таймлайн тестов
      ========================================================================= -->
 
-<!--
-  .group-selector — визуальная «карточка» секции: серый фон, рамка, отступы.
-  Определён в style.css. Содержимое — сам мультиселект, кнопки и таймлайн.
--->
 <div class="group-selector">
   <h3>Таймлайн для группы тестов</h3>
 
-  <!--
-    .multi-select — обёртка для мультиселекта.
-    Позиционируется position: relative, чтобы выпадающий список (absolute)
-    корректно считал координаты.
-    Также используется в app.js: клик вне .multi-select закрывает дропдаун.
-  -->
   <div class="multi-select">
-
-    <!--
-      Видимое «поле» мультиселекта.
-      readonly — пользователь не печатает здесь, клик только открывает/закрывает
-      дропдаун. Поиск — в #groupSearch.
-      id="groupInput" слушает app.js: toggle .open на #groupDropdown.
-    -->
+    <!-- Видимое поле мультиселекта. Клик открывает/закрывает дропдаун. -->
     <input type="text"
            class="multi-select-input"
            id="groupInput"
@@ -103,18 +96,8 @@
            autocomplete="off"
            readonly>
 
-    <!--
-      Сам выпадающий список.
-      По умолчанию display: none. Класс .open (добавляется из JS) делает его видимым.
-      Внутри: строка поиска + контейнер опций.
-    -->
+    <!-- Сам дропдаун. По умолчанию скрыт; .open делает его видимым. -->
     <div class="multi-select-dropdown" id="groupDropdown">
-
-      <!--
-        Верхняя строка дропдауна с полем фильтра.
-        .multi-select-search — sticky сверху, чтобы поле не уезжало при скролле.
-        onclick="event.stopPropagation()" — чтобы клик по полю не закрывал дропдаун.
-      -->
       <div class="multi-select-search">
         <input type="text"
                id="groupSearch"
@@ -122,82 +105,37 @@
                autocomplete="off"
                onclick="event.stopPropagation()">
       </div>
-
-      <!--
-        Контейнер для списка опций.
-        Наполняется из app.js: renderOptions(filter) пишет сюда HTML вида:
-          <div class="multi-select-option" data-key="test_login">
-            <input type="checkbox">
-            <span>LoginTest.test_login</span>
-            <span class="threads">test_login</span>
-            <span class="threads">[worker-1]</span>
-            <span class="status passed">PASSED</span>
-          </div>
-        Клик по опции переключает выбор в Set `selected`.
-      -->
       <div id="groupOptions"></div>
     </div>
   </div>
 
-  <!--
-    Кнопки массовых действий.
-    .select-actions — flex-контейнер для двух кнопок.
-    id="selectAllBtn" → groupMulti.selectAllVisible()
-    id="clearAllBtn"  → groupMulti.clearAll()
-    type="button" — чтобы кнопки не были submit-кнопками (на будущее, если появится <form>).
-  -->
   <div class="select-actions">
     <button type="button" id="selectAllBtn">Выбрать все видимые</button>
     <button type="button" id="clearAllBtn">Очистить</button>
   </div>
 
-  <!--
-    Контейнер для тегов выбранных тестов.
-    app.js рендерит сюда:
-      <span class="selected-tag">
-        LoginTest.test_login
-        <button data-remove="test_login">&times;</button>
-      </span>
-    Клик по крестику удаляет тест из выбранных.
-  -->
+  <!-- Теги выбранных тестов. -->
   <div class="selected-tags" id="selectedTags"></div>
 
-  <!--
-    Кнопка построения таймлайна группы тестов.
-    - id="buildBtn" — слушается в app.js, вызывает groupMulti.build()
-    - class="build-timeline-btn" — синяя кнопка (серая в :disabled)
-    - disabled по умолчанию: включается при selected.size >= 2
-      (условие в updateButton: minSelected = 2)
-    По клику шлётся POST /group-timeline { keys: [...] }.
-  -->
+  <!-- Кнопка построения. Активна при selected.size >= 2. -->
   <button type="button" class="build-timeline-btn" id="buildBtn" disabled>
     Построить таймлайн тестов
   </button>
 
-  <!--
-    Контейнер для результата — сюда renderTimeline(data) пишет строки таймлайна.
-    Пустой в HTML.
-  -->
+  <!-- Контейнер результата. -->
   <div id="groupTimeline"></div>
 </div>
 
 
 <!-- =========================================================================
      СЕКЦИЯ 3. Таймлайн событий
-     (формально в id остались "mixed*", но фактически это таймлайн событий)
      ========================================================================= -->
 
 <div class="group-selector">
-  <h3>Таймлайн тестов и событий</h3>
+  <h3>Таймлайн событий</h3>
 
-  <!--
-    Мультиселект тестов в секции 3.
-    В текущей версии app.js он НЕ используется (секция строит таймлайн только
-    по типам событий). Оставлен для совместимости — id здесь должны совпадать
-    с app.js, даже если логика их пока не трогает.
-    Если решишь убрать — удали весь этот блок .multi-select
-    и соответствующую часть в app.js.
-  -->
+  <!-- Мультиселект тестов в этой секции сейчас не используется;
+       оставлен для совместимости с app.js. Если убирать — удалять и в JS. -->
   <div class="multi-select">
     <input type="text"
            class="multi-select-input"
@@ -218,27 +156,18 @@
     </div>
   </div>
 
-  <!-- Кнопки массовых действий для мультиселекта тестов (не используются сейчас). -->
   <div class="select-actions">
     <button type="button" id="mixedSelectAllBtn">Выбрать все видимые</button>
     <button type="button" id="mixedClearAllBtn">Очистить</button>
   </div>
 
-  <!-- Теги выбранных тестов (не используются сейчас). -->
   <div class="selected-tags" id="mixedSelectedTags"></div>
 
   <!--
     Блок чекбоксов типов событий.
-    .event-types-block — белая карточка с рамкой (стили в style.css).
+    Наполняется из app.js: renderEventTypes() на основе GET /event-types.
   -->
   <div class="event-types-block">
-
-    <!--
-      Заголовок блока + кнопки быстрого выбора.
-      id="eventTypesAllBtn"  → отметить все типы
-      id="eventTypesNoneBtn" → снять все типы
-      style="margin:0" — убирает верхний отступ у .select-actions внутри шапки.
-    -->
     <div class="event-types-header">
       <strong>Типы событий</strong>
       <div class="select-actions" style="margin:0">
@@ -247,85 +176,85 @@
       </div>
     </div>
 
-    <!--
-      Список чекбоксов типов событий.
-      Наполняется из app.js: renderEventTypes() пишет сюда:
-        <label>
-          <input type="checkbox" value="org.junit.TestExecution">
-          <span>org.junit.TestExecution</span>
-          <span class="count">9</span>
-        </label>
-      Значения value — из GET /event-types.
-
-      Плейсхолдер "Загрузка типов событий..." показывается до первого рендера
-      (или если типов не найдено — см. renderEventTypes()).
-    -->
     <div class="event-types-list" id="eventTypesList">
       <div class="empty">Загрузка типов событий...</div>
     </div>
   </div>
 
-  <!--
-    Кнопка построения таймлайна событий.
-    - id="mixedBuildBtn" — слушается в app.js, вызывает buildEventTimeline()
-    - disabled по умолчанию: активируется в updateEventBuildBtn()
-      при selectedEventTypes.size > 0
-    По клику шлётся POST /mixed-timeline { event_types: [...] }.
-  -->
+  <!-- Кнопка построения. Активна при selectedEventTypes.size > 0. -->
   <button type="button" class="build-timeline-btn" id="mixedBuildBtn" disabled>
-    Построить смешанный таймлайн
+    Построить таймлайн событий
   </button>
 
-  <!--
-    Контейнер результата.
-    renderEventTimeline(data) пишет сюда строки таймлайна в формате JfrEvent:
-      <div class="row">
-        <div class="row-label" title="...">
-          display_name
-          <span class="threads">[thread]</span>
-          <span class="threads">event_type</span>
-        </div>
-        <div class="row-track">
-          <div class="tick major" style="left:10%"></div>
-          ...
-          <div class="bar test-event" style="left:5%; width:12%"></div>
-        </div>
-      </div>
-  -->
+  <!-- Контейнер результата. -->
   <div id="mixedTimeline"></div>
 </div>
 
-<div class="timeline-toolbar">
-  <input id="tlSearch" placeholder="Найти тест по имени..." autocomplete="off">
-  <button type="button" id="tlZoomReset">Сбросить зум</button>
-  <span id="tlZoomInfo" class="zoom-info"></span>
-</div>
 
-<div class="timeline-scroll" id="tlScroll">
-  <div class="timeline-inner" id="tlInner">
-    <div id="tlThreads"></div>
-    <div id="tlAxis"></div>
+<!-- =========================================================================
+     СЕКЦИЯ 4. Таймлайн по потокам
+     ========================================================================= -->
+
+<div class="group-selector">
+  <h3>Таймлайн по потокам</h3>
+
+  <!--
+    Панель управления:
+      #tlSearch      — поиск по имени события, подсвечивает совпадения.
+      #tlToStart     — прыжок в начало оси.
+      #tlToEnd       — прыжок в конец оси.
+      #tlZoom1/10/100 — предустановленный зум к центру.
+      #tlZoomReset   — вернуть весь диапазон.
+      #tlZoomInfo    — текстом текущий масштаб и видимый интервал.
+  -->
+  <div class="timeline-toolbar">
+    <input id="tlSearch"
+           placeholder="Поиск по имени события..."
+           autocomplete="off">
+
+    <button type="button" id="tlToStart" title="В начало">⏮</button>
+    <button type="button" id="tlToEnd"   title="В конец">⏭</button>
+
+    <button type="button" id="tlZoom1">×1</button>
+    <button type="button" id="tlZoom10">×10</button>
+    <button type="button" id="tlZoom100">×100</button>
+    <button type="button" id="tlZoomReset">Сбросить</button>
+
+    <span id="tlZoomInfo" class="zoom-info"></span>
+  </div>
+
+  <!--
+    Сам таймлайн. Каждая дорожка = поток (thread_name).
+    Наполняется из threads.js: renderThreadsTimeline().
+    Обёртка #tlInner нужна для возможных будущих манипуляций с шириной;
+    сейчас ширина 100%, прокрутка делается через tlOffset + пересчёт left.
+  -->
+  <div class="timeline-scroll" id="tlScroll">
+    <div class="timeline-inner" id="tlInner">
+      <div id="tlThreads"></div>
+      <div id="tlAxis"></div>
+    </div>
+  </div>
+
+  <!--
+    Мини-карта (overview) — тонкая полоса с прямоугольником видимой области.
+    Позволяет видеть, где ты находишься на всей оси, и прыгать/тащить окно.
+    Наполняется из threads.js: updateOverviewWindow().
+  -->
+  <div class="timeline-overview" id="tlOverview">
+    <div class="timeline-overview-window" id="tlOverviewWindow"></div>
   </div>
 </div>
 
 
 <!--
   Подключение JS в самом низу <body>:
-    - DOM уже построен к моменту выполнения скрипта
-    - все document.getElementById(...) из app.js вернут реальные элементы
-    - если перенести этот тег в <head> без defer, получим
-      "Cannot read properties of null (reading 'addEventListener')"
-
-  Отдаётся handler._send_static("app.js", "application/javascript; ...").
-
-  Что делает app.js при загрузке:
-    1. loadAllTests()         → GET /all-tests
-    2. loadEventTypes()       → GET /event-types
-    3. groupMulti.renderOptions()   — рисует опции в #groupOptions
-    4. renderEventTypes()     — рисует чекбоксы в #eventTypesList
-    5. updateButton() / updateEventBuildBtn() — активирует кнопки по состоянию
+    - DOM уже построен, все getElementById(...) вернут реальные элементы.
+    - app.js     — секции 1–3 (поиск, группа тестов, таймлайн событий).
+    - threads.js — секция 4 (таймлайн по потокам с зумом и мини-картой).
 -->
 <script src="/app.js"></script>
 <script src="/threads.js"></script>
+
 </body>
 </html>
