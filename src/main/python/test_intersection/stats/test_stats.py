@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from ..test_events import TestCase
+from test_intersection.test_events import TestCase
 
 
 @dataclass

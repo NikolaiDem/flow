@@ -70,7 +70,7 @@ def main() -> int:
 
     if jfr_dir.is_dir() and any(jfr_dir.glob("*.jfr")):
         print("Найдены JFR-файлы, парсим...")
-        jfr_to_json(jfr_dir, json_dir)
+        jfr_to_json(jfr_dir, json_dir, events=list("org.junit.TestExecution"))
         events = collect_all(json_dir, PARSERS)
         if not events:
             print("JFR-файлы не дали событий, использую демо-данные.")

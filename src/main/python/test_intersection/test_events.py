@@ -86,6 +86,7 @@ def parse_event(raw: dict) -> TestCase | None:
     class_name, method_name = _parse_unique_id(values.get("uniqueId") or "")
 
     return TestCase(
+        name=class_name + ':' + method_name,
         class_name=class_name,
         method_name=method_name,
         display_name=values.get("displayName") or "<unnamed>",
