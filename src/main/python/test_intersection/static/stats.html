@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Статистика тестов</title>
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<h1>Статистика тестов</h1>
+
+<div class="stats-summary" id="summary"></div>
+
+<div class="chart-container">
+  <h3>Длительности (линейная шкала)</h3>
+  <canvas id="histLinear"></canvas>
+</div>
+
+<div class="chart-container">
+  <h3>Длительности (логарифмическая шкала)</h3>
+  <canvas id="histLog"></canvas>
+</div>
+
+<div class="chart-container">
+  <h3>Время по потокам</h3>
+  <canvas id="threadsChart"></canvas>
+</div>
+
+<div id="threadsTable"></div>
+
+<script src="/stats.js"></script>
+</body>
+</html>

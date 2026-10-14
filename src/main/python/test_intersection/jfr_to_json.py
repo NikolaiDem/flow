@@ -8,7 +8,13 @@ log = logging.getLogger("analyze_jfr")
 # --------------------------------------------------------------------------- #
 # Конвертация JFR -> JSON
 # --------------------------------------------------------------------------- #
-def jfr_to_json(jfr_dir: Path, out_dir: Path, *, force: bool = False) -> None:
+def jfr_to_json(
+        jfr_dir: Path,
+        out_dir: Path,
+        events: list[str] | None = None,
+        *,
+        force: bool = False,
+) -> None:
     """Конвертирует все *.jfr в out_dir/*.json через `jfr print`."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -32,10 +38,17 @@ def jfr_to_json(jfr_dir: Path, out_dir: Path, *, force: bool = False) -> None:
         cmd = [
             "jfr", "print",
             "--json",
-            #"--events", TEST_EVENT_TYPE,
-            str(jfr_file),
         ]
+
+        # Если список типов задан и непуст — добавляем --events
+        if events:
+            cmd += ["--events", ",".join(events)]
+
+        cmd.append(str(jfr_file))
+
         log.info("Converting: %s -> %s", jfr_file.name, out_file.name)
+        if events:
+            log.info("  events filter: %s", ",".join(events))
 
         try:
             with open(out_file, "w", encoding="utf-8") as f:
