@@ -44,9 +44,10 @@ java -javaagent:/path/to/flow-mvp-1.0-SNAPSHOT.jar=spring-jfr=true \
 
 ## Параметры
 
-| Параметр | По умолчанию | Описание |
-|---|---|---|
-| `spring-jfr` | `false` | Инструментирование `SpringApplication`. |
+| Параметр         | По умолчанию | Описание                                |
+|------------------|---|-----------------------------------------|
+| `spring-jfr`     | `false` | Инструментирование `SpringApplication`. |
+| `flow-recording` | `false` | Запись исполняющихся методов.           |
 
 Параметры передаются через `-javaagent:agent.jar=key=value,key=value` или через `-Dflow.config="key=value,..."`. Аргументы `premain` имеют приоритет.
 
@@ -75,7 +76,21 @@ jmc context-startup.jfr
 
 ```bash
 java \
-  -javaagent:/path/to/flow-mvp-1.0-SNAPSHOT.jar=enabled=true,spring-jfr=true,verbose=true \
-  -XX:StartFlightRecording:filename=context-startup.jfr,duration=120s \
+  -javaagent:/path/to/flow-mvp-1.0-SNAPSHOT.jar=enabled=true,spring-jfr=true,flow-recording=true \
+  -Dflow.config=D://work/config/config.yml
+  -XX:StartFlightRecording:filename=context-startup.jfr\
   -jar your-application.jar
+```
+
+
+
+Добавить в pom.xml для записи деталиции spring контекстов в тестах
+
+```xml
+<dependency>
+    <groupId>digital.pragmatech.testing</groupId>
+    <artifactId>spring-test-profiler</artifactId>
+    <version>0.4.0</version>
+    <scope>test</scope>
+</dependency>
 ```

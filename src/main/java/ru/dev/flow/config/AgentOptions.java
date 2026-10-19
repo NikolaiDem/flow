@@ -3,6 +3,7 @@ package ru.dev.flow.config;
 public final class AgentOptions {
 
     private final boolean springJfr;
+    private final boolean flowRecording;
     private final boolean verbose;
     private final String recordingName;
     private final boolean failOnError;
@@ -10,14 +11,30 @@ public final class AgentOptions {
     private AgentOptions(Builder b) {
         this.springJfr = b.springJfr;
         this.verbose = b.verbose;
+        this.flowRecording = b.flowRecording;
         this.recordingName = b.recordingName;
         this.failOnError = b.failOnError;
     }
 
-    public boolean isSpringJfr() { return springJfr; }
-    public boolean isVerbose() { return verbose; }
-    public String getRecordingName() { return recordingName; }
-    public boolean isFailOnError() { return failOnError; }
+    public boolean isSpringJfr() {
+        return springJfr;
+    }
+
+    public boolean isFlowRecording() {
+        return flowRecording;
+    }
+
+    public boolean isVerbose() {
+        return verbose;
+    }
+
+    public String getRecordingName() {
+        return recordingName;
+    }
+
+    public boolean isFailOnError() {
+        return failOnError;
+    }
 
     public static AgentOptions parse(String args) {
         Builder b = new Builder();
@@ -42,10 +59,11 @@ public final class AgentOptions {
             String value = kv[1].trim();
 
             switch (key) {
-                case "spring-jfr"        -> b.springJfr = Boolean.parseBoolean(value);
-                case "verbose"        -> b.verbose = Boolean.parseBoolean(value);
+                case "spring-jfr" -> b.springJfr = Boolean.parseBoolean(value);
+                case "flow-recording" -> b.flowRecording = Boolean.parseBoolean(value);
+                case "verbose" -> b.verbose = Boolean.parseBoolean(value);
                 case "recording-name" -> b.recordingName = value;
-                case "fail-on-error"  -> b.failOnError = Boolean.parseBoolean(value);
+                case "fail-on-error" -> b.failOnError = Boolean.parseBoolean(value);
                 default -> {
                     // Неизвестные ключи игнорируем, но сообщаем при verbose
                     b.unknownKeys.add(key);
@@ -57,17 +75,20 @@ public final class AgentOptions {
 
     public static final class Builder {
         private boolean springJfr = false;
+        private boolean flowRecording;
         private boolean verbose = false;
         private String recordingName = "spring-context-startup";
         private boolean failOnError = false;
         private final java.util.List<String> unknownKeys = new java.util.ArrayList<>();
 
-        public AgentOptions build() { return new AgentOptions(this); }
+        public AgentOptions build() {
+            return new AgentOptions(this);
+        }
     }
 
     @Override
     public String toString() {
         return "AgentOptions{enabled=" + springJfr + ", verbose=" + verbose +
-               ", recordingName='" + recordingName + "', failOnError=" + failOnError + '}';
+                ", recordingName='" + recordingName + "', failOnError=" + failOnError + '}';
     }
 }
