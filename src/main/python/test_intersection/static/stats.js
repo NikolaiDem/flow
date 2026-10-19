@@ -26,18 +26,10 @@ function renderSummary(data) {
       <span class="value">${data.total}</span></div>
     <div class="stat-card"><span class="label">Success rate</span>
       <span class="value">${(data.success_rate * 100).toFixed(1)}%</span></div>
-    <div class="stat-card"><span class="label">Суммарное время</span>
+    <div class="stat-card"><span class="label">Суммарное время исходное</span>
       <span class="value">${fmtSec(ds.sum_s)}</span></div>
-    <div class="stat-card"><span class="label">Среднее</span>
-      <span class="value">${fmtSec(ds.mean_s)}</span></div>
-    <div class="stat-card"><span class="label">Медиана</span>
-      <span class="value">${fmtSec(ds.median_s)}</span></div>
-    <div class="stat-card"><span class="label">p90</span>
-      <span class="value">${fmtSec(ds.p90_s)}</span></div>
-    <div class="stat-card"><span class="label">p99</span>
-      <span class="value">${fmtSec(ds.p99_s)}</span></div>
-    <div class="stat-card"><span class="label">Max</span>
-      <span class="value">${fmtSec(ds.max_s)}</span></div>
+    <div class="stat-card"><span class="label">Суммарное время в последовательном выполнении</span>
+      <span class="value">${fmtSec(ds.origin_sum_s)}</span></div>
   `;
 }
 
@@ -122,38 +114,6 @@ function renderThreadsChart(threads) {
     });
 }
 
-function renderThreadsTable(threads) {
-    const el = document.getElementById('threadsTable');
-    el.innerHTML = `
-    <h3>Потоки (таблица)</h3>
-    <table class="stats-table">
-      <thead>
-        <tr>
-          <th>Поток</th><th>Тестов</th><th>Упало</th>
-          <th>Сумма, с</th><th>Wall, с</th>
-          <th>Сред, с</th><th>Медиана, с</th>
-          <th>Min, с</th><th>Max, с</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${threads.map(t => `
-          <tr>
-            <td class="mono">${escapeHtml(t.name)}</td>
-            <td>${t.total}</td>
-            <td>${t.failed}</td>
-            <td>${t.total_time_s.toFixed(2)}</td>
-            <td>${t.wall_s.toFixed(2)}</td>
-            <td>${t.mean_s.toFixed(3)}</td>
-            <td>${t.median_s.toFixed(3)}</td>
-            <td>${t.min_s.toFixed(3)}</td>
-            <td>${t.max_s.toFixed(3)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
 function renderCdf(canvasId, cdf) {
     if (!cdf || !cdf.length) return;
 
@@ -212,9 +172,6 @@ function renderCdf(canvasId, cdf) {
 (async function init() {
     const data = await loadStats();
     renderSummary(data);
-    renderHistogram('histLinear', data.hist_linear, {color: '#4a90d9'});
-    renderHistogram('histLog', data.hist_log, {color: '#7bb86f', log: true});
     renderThreadsChart(data.by_thread);
-    renderThreadsTable(data.by_thread);
     renderCdf('cdfChart', data.cdf);
 })();

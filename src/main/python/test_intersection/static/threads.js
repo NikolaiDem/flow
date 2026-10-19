@@ -53,11 +53,7 @@ function eventMatches(ev, query) {
 }
 
 function eventTitle(ev) {
-  const parts = [];
-  parts.push(ev.display_name || ev.name || '—');
-  if (ev.name && ev.name !== ev.display_name) parts.push(`(${ev.name})`);
-  if (ev.event_type) parts.push(`type=${ev.event_type}`);
-  return parts.join(' ');
+  return ev.name;
 }
 
 
@@ -78,6 +74,108 @@ function projectWidth(fullWidthPct) {
 }
 
 
+// ---------- засечки и сетка ----------
+
+/**
+ * Округляет шаг до ближайшего «красивого» значения:
+ * 1 мс, 2 мс, 5 мс, 10 мс, 20 мс, 50 мс, 100 мс, 200 мс, 500 мс,
+ * 1 с, 2 с, 5 с, 10 с, 30 с, 1 мин, 5 мин, 15 мин, 1 ч и т.д.
+ */
+function niceStep(ms) {
+  if (ms <= 0) return 1;
+  const exp = Math.floor(Math.log10(ms));
+  const base = Math.pow(10, exp);
+  const norm = ms / base;
+  let mult;
+  if (norm < 1.5) mult = 1;
+  else if (norm < 3.5) mult = 2;
+  else if (norm < 7.5) mult = 5;
+  else mult = 10;
+  return mult * base;
+}
+
+/**
+ * Форматирует метку времени с точностью, соответствующей шагу.
+ */
+function formatTime(dt, stepMs) {
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mm = String(dt.getMinutes()).padStart(2, '0');
+  const ss = String(dt.getSeconds()).padStart(2, '0');
+  const ms = String(dt.getMilliseconds()).padStart(3, '0');
+
+  if (stepMs < 1000) {
+    return `${hh}:${mm}:${ss}.${ms}`;
+  }
+  if (stepMs < 60_000) {
+    return `${hh}:${mm}:${ss}`;
+  }
+  return `${hh}:${mm}`;
+}
+
+/**
+ * Генерирует засечки для текущего состояния зума.
+ * Чем больше tlZoom, тем мельче шаг и точнее подписи.
+ *
+ * @param {number} axisStartMs
+ * @param {number} axisEndMs
+ * @param {number} maxTicks — верхний предел, чтобы не забить DOM
+ * @returns {Array<{left: number, label: string}>}
+ */
+function makeTicksForZoom(axisStartMs, axisEndMs, maxTicks = 200) {
+  const span = Math.max(axisEndMs - axisStartMs, 1);
+  const viewSpan = 1 / tlZoom;
+  const viewStartMs = axisStartMs + tlOffset * span;
+  const viewEndMs = viewStartMs + viewSpan * span;
+
+  // Ширина трека в пикселях — от неё зависит, сколько подписей влезет.
+  const track = document.querySelector('.tl-row-track');
+  const trackWidth = track ? track.getBoundingClientRect().width : 800;
+
+  // Минимальное расстояние между подписями (в пикселях).
+  const MIN_LABEL_GAP_PX = 80;
+
+  // Сколько засечек максимум влезает на видимую часть.
+  const maxVisible = Math.max(2, Math.floor(trackWidth / MIN_LABEL_GAP_PX));
+
+  // Базовый шаг по времени: целимся в maxVisible засечек.
+  let stepMs = niceStep((viewEndMs - viewStartMs) / maxVisible);
+
+  // Если подписи всё равно не влезают (например, формат слишком длинный),
+  // увеличиваем шаг в 2 раза, пока не влезем.
+  // Здесь эмпирика: длина подписи ~7 символов × 7 px ≈ 50 px.
+  const labelPx = 60;
+  while ((trackWidth / ((viewEndMs - viewStartMs) / stepMs)) < labelPx && stepMs < span) {
+    stepMs *= 2;
+    stepMs = niceStep(stepMs);
+  }
+
+  const t0 = Math.ceil(viewStartMs / stepMs) * stepMs;
+  const result = [];
+  for (let t = t0; t <= viewEndMs && result.length < maxTicks; t += stepMs) {
+    const left = ((t - axisStartMs) / span) * 100;
+    result.push({ left, label: formatTime(new Date(t), stepMs) });
+  }
+  return result;
+}
+
+/**
+ * Рисует вертикальные линии сетки поверх всех дорожек.
+ * Принимает засечки, посчитанные на фронте под текущий зум.
+ */
+function renderGrid(ticks) {
+  const gridEl = document.getElementById('tlGrid');
+  if (!gridEl) return;
+
+  gridEl.innerHTML = (ticks || []).map((t, i) => {
+    const left = projectLeft(t.left);
+    const isMajor = (i % 5 === 0) || (i === ticks.length - 1);
+
+    return `<div class="tl-grid-line${isMajor ? ' major' : ''}"
+                 style="left:${left.toFixed(4)}%"></div>`;
+  }).join('');
+}
+
+
 // ---------- рендер ----------
 
 function scheduleRender() {
@@ -95,9 +193,6 @@ function renderThreadsTimeline() {
   const threadsEl = document.getElementById('tlThreads');
   const axisEl = document.getElementById('tlAxis');
   if (!threadsEl || !axisEl) return;
-
-  const viewStart = tlOffset;
-  const viewEnd = tlOffset + 1 / tlZoom;
 
   // ---- дорожки ----
   const rowsHtml = tlData.threads.map(thread => {
@@ -132,16 +227,20 @@ function renderThreadsTimeline() {
 
   threadsEl.innerHTML = rowsHtml;
 
+  // ---- засечки (генерируются на фронте под текущий зум) ----
+  const ticks = makeTicksForZoom(tlData.axis_start_ms, tlData.axis_end_ms);
+
   // ---- ось ----
-  const ticksHtml = (tlData.ticks || []).map(t => {
-    const pct = t.left / 100;
-    if (pct < viewStart - 0.005 || pct > viewEnd + 0.005) return '';
+  const ticksHtml = ticks.map(t => {
     const left = projectLeft(t.left);
     return `<span class="tl-axis-label" style="left:${left.toFixed(4)}%">${escapeHtml(t.label)}</span>`;
   }).join('');
   axisEl.innerHTML = `<div class="tl-axis-inner">${ticksHtml}</div>`;
 
-  // ---- мини-карта: обновляем окно ----
+  // ---- вертикальная сетка (те же ticks, что и ось) ----
+  renderGrid(ticks);
+
+  // ---- мини-карта ----
   updateOverviewWindow();
 }
 
@@ -318,8 +417,9 @@ function bindDragPan() {
 
   scroll.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    // Не начинаем drag, если клик по мини-карте или по бару-подсветке.
+    // Не начинаем drag, если клик по мини-карте или по бару.
     if (e.target.closest('.timeline-overview')) return;
+    if (e.target.closest('.bar')) return;
 
     e.preventDefault();
     dragging = true;
@@ -373,7 +473,6 @@ function bindSearch() {
 function focusFirstMatch() {
   if (!tlHighlight || !tlData) return;
 
-  // Ищем первое подходящее событие в данных.
   let hit = null;
   for (const thread of tlData.threads) {
     for (const ev of thread.events) {
@@ -383,11 +482,9 @@ function focusFirstMatch() {
   }
   if (!hit) return;
 
-  // Позиция события в долях полной оси.
   const centerPct = (hit.left + hit.width / 2) / 100;
   const viewSpan = 1 / tlZoom;
 
-  // Хотим видеть его примерно на 1/3 экрана — с запасом слева.
   const desiredLeft = 0.33;
   let newOffset = centerPct - desiredLeft * viewSpan;
   newOffset = Math.max(0, Math.min(newOffset, 1 - viewSpan));
@@ -396,7 +493,6 @@ function focusFirstMatch() {
   scheduleRender();
   updateZoomInfo();
 
-  // После рендера проскроллим контейнер к подсвеченному бару.
   requestAnimationFrame(() => {
     const el = document.querySelector('#tlThreads .bar.highlight');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });

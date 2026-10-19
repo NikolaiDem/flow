@@ -1,3 +1,8 @@
+<!--
+  stats.html — страница статистики по тестам.
+  Данные приходят из GET /test-stats (см. handler._test_stats).
+  Рендер — в /stats.js.
+-->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -9,29 +14,36 @@
 <body>
 <h1>Статистика тестов</h1>
 
+<!--
+  Сводка ключевых чисел:
+    - всего тестов;
+    - суммарное время (если бы все тесты шли в один поток) — sum(duration);
+  Наполняется из renderSummary(data).
+-->
 <div class="stats-summary" id="summary"></div>
 
+<!--
+  Пункт 5.
+  CDF: сколько тестов имеют длительность ≤ t.
+  Ступенчатая линия (stepped), ось X — секунды от 0 до max,
+  ось Y — количество тестов от 0 до total.
+  Наполняется из renderCdf('cdfChart', data.cdf).
+-->
 <div class="chart-container">
-  <h3>Длительности (линейная шкала)</h3>
-  <canvas id="histLinear"></canvas>
-</div>
-
-<div class="chart-container">
-  <h3>Длительности (логарифмическая шкала)</h3>
-  <canvas id="histLog"></canvas>
-</div>
-
-<div class="chart-container">
-  <h3>Кумулята: количество тестов по длительности</h3>
+  <h3>Кумулятивная функция распределения длительности тестов</h3>
   <canvas id="cdfChart"></canvas>
 </div>
 
+<!--
+  Пункт 4.
+  Bar chart по потокам: сколько времени выполнялся каждый тест
+  в потоке. Для каждого потока — суммарное время тестов (total_time).
+  Наполняется из renderThreadsChart(data.by_thread).
+-->
 <div class="chart-container">
-  <h3>Время по потокам</h3>
+  <h3>Таймлайн по потокам: время выполнения тестов</h3>
   <canvas id="threadsChart"></canvas>
 </div>
-
-<div id="threadsTable"></div>
 
 <script src="/stats.js"></script>
 </body>

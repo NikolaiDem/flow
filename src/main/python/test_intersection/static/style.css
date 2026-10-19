@@ -89,7 +89,7 @@ input { width: 100%; padding: .6rem; font-size: 1rem; box-sizing: border-box; }
   border-radius: 3px;
   opacity: .9;
   cursor: help;
-  z-index: 1;
+  z-index: 2;
 }
 
 /* статусы тестов */
@@ -376,33 +376,6 @@ input { width: 100%; padding: .6rem; font-size: 1rem; box-sizing: border-box; }
   background: #fafbfc;
 }
 
-.tl-row {
-  display: flex;
-  align-items: center;
-  height: 22px;
-  border-bottom: 1px solid #eef1f4;
-}
-.tl-row:last-child { border-bottom: none; }
-
-.tl-row-label {
-  width: 220px;
-  flex: 0 0 220px;
-  font-size: .75rem;
-  color: #555;
-  padding: 0 .5rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tl-row-track {
-  position: relative;
-  flex: 1;
-  height: 100%;
-  background: #fff;
-  overflow: hidden;
-}
-
 .tl-axis-inner {
   position: relative;
   height: 16px;
@@ -525,3 +498,174 @@ input { width: 100%; padding: .6rem; font-size: 1rem; box-sizing: border-box; }
   cursor: grab;
 }
 .timeline-overview-window:active { cursor: grabbing; }
+
+/* ============================================================
+   Таймлайн по потокам — общий layout
+   ============================================================ */
+
+/* Контейнер таймлайна. Относительное позиционирование нужно,
+   чтобы ::before с вертикальной линией встал относительно него. */
+.timeline-scroll {
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 60vh;
+  border: 1px solid #ddd;
+  background: #fafbfc;
+  cursor: grab;
+}
+.timeline-scroll:active { cursor: grabbing; }
+
+/* Вертикальная линия между подписями потоков и дорожками.
+   left должен совпадать с шириной .tl-row-label. */
+.timeline-scroll::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 220px;
+  width: 1px;
+  background: #b9c0c8;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Внутренний блок — обёртка дорожек и оси. */
+.timeline-inner {
+  position: relative;
+}
+
+/* ============================================================
+   Дорожка и её части
+   ============================================================ */
+
+/* Одна строка = один поток. */
+.tl-row {
+  display: flex;
+  align-items: stretch;         /* растягиваем подпись и дорожку по высоте строки */
+  height: 22px;
+  border-bottom: 1px solid #d0d6dc;   /* заметно темнее прежнего */
+}
+.tl-row:last-child { border-bottom: none; }
+.tl-row:nth-child(odd)  { background: #fafbfc; }  /* зебра для контраста */
+.tl-row:nth-child(even) { background: #ffffff; }
+
+/* Подпись потока (левая колонка). */
+.tl-row-label {
+  width: 220px;
+  flex: 0 0 220px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  font-size: .75rem;
+  font-weight: 500;
+  color: #333;
+  padding: 0 .75rem 0 .6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #eef2f6;          /* отдельный фон колонки подписей */
+  border-right: 1px solid #b9c0c8;  /* вторая линия, страхует ::before */
+}
+.tl-row-label .threads {
+  color: #8b929a;
+  margin-left: .35rem;
+  font-weight: 400;
+}
+
+/* Дорожка с барами. */
+.tl-row-track {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* Нулевая засечка в начале дорожки. */
+.tl-row-track::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: #e0e5ea;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ============================================================
+   Ось подписей под дорожками
+   ============================================================ */
+
+.tl-axis-inner {
+  position: relative;
+  height: 16px;
+  margin-left: 220px;           /* совпадает с шириной подписи */
+  font-size: 9px;
+  color: #8b929a;
+}
+.tl-axis-label {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  line-height: 1;
+}
+
+/* ============================================================
+   Мини-карта (overview)
+   ============================================================ */
+
+.timeline-overview {
+  position: relative;
+  height: 22px;
+  margin-top: 6px;
+  margin-left: 220px;           /* совпадает с шириной подписи */
+  background: #eef1f4;
+  border: 1px solid #d6dbe0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.timeline-overview-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(63, 143, 220, .25);
+  border: 1px solid #3f8fdc;
+  border-radius: 2px;
+  cursor: grab;
+}
+.timeline-overview-window:active { cursor: grabbing; }
+
+/* ============================================================
+   Вертикальная сетка таймлайна
+   ============================================================ */
+
+.timeline-inner {
+  position: relative;    /* чтобы #tlGrid позиционировался от него */
+}
+
+.tl-grid-layer {
+  position: absolute;
+  left: 220px;           /* ширина .tl-row-label */
+  right: 0;
+  top: 0;
+  bottom: 20px;          /* оставить место под ось #tlAxis */
+  pointer-events: none;  /* клики проходят сквозь сетку */
+  z-index: 999;            /* бары (.bar) — z-index: 1, они сверху */
+  overflow: hidden;
+}
+
+.tl-grid-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.10);
+}
+
+.tl-grid-line.major {
+  background: rgba(0, 0, 0, 0.24);
+}

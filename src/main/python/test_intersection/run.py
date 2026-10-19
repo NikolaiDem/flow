@@ -113,7 +113,7 @@ def make_demo_events() -> list:
         tc("PaymentTest", "test_payment", "Payment — card declined",
            "worker-2", 1.2, 2.0, "FAILED"),
         tc("ProfileTest", "test_profile", "Profile — update display name",
-           "worker-1", 2.5, 1.5, "PASSED"),
+           "worker-1", 4.5, 1.5, "PASSED"),
         tc("LogoutTest", "test_logout", "Logout — clears session",
            "worker-3", 5.0, 1.0, "PASSED"),
         tc("SearchTest", "test_search", "Search — full-text query",

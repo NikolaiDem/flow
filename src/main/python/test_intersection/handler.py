@@ -27,9 +27,7 @@ from events_timeline import (
 )
 
 from collections import defaultdict
-
-from stats.test_stats import TestStats
-from stats.stats_hist import build_linear_histogram, build_log_histogram, build_cdf
+from stats.test_stats import build_test_stats
 
 log = logging.getLogger(__name__)
 
@@ -126,8 +124,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/stats.js":
             self._send_static("stats.js", "application/javascript; charset=utf-8")
         elif path == "/test-stats":
-            self._send_json(self._test_stats())
+            self._send_json(build_test_stats())
 
+        elif path == "/timeline":
+            self._send_static("timeline.html", "text/html; charset=utf-8")
         elif path == "/threads-timeline":
             self._send_json(self._threads_timeline())
 
@@ -380,53 +380,6 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-    def _test_stats(self) -> dict:
-        stats = TestStats()
-        for tc in g.TEST_EVENTS:
-            stats.add(tc)
-
-        ds = stats.durations_summary()
-
-        hist_linear = [
-            {"lo": b.lo, "hi": b.hi, "count": b.count}
-            for b in build_linear_histogram(stats.durations, bins=30)
-        ]
-        hist_log = [
-            {"lo": b.lo, "hi": b.hi, "count": b.count}
-            for b in build_log_histogram(stats.durations, bins_per_decade=4)
-        ]
-
-        cdf = build_cdf(stats.durations, max_points=500)
-
-        by_thread = []
-        for name, ts in sorted(
-                stats.by_thread.items(),
-                key=lambda kv: kv[1].total_time,
-                reverse=True,
-        ):
-            by_thread.append({
-                "name": name,
-                "total": ts.total,
-                "failed": ts.failed,
-                "total_time_s": ts.total_time.total_seconds(),
-                "wall_s": ts.wall_clock.total_seconds(),
-                "mean_s": ts.mean_seconds(),
-                "median_s": ts.median_seconds(),
-                "min_s": ts.min_duration.total_seconds() if ts.min_duration else 0.0,
-                "max_s": ts.max_duration.total_seconds() if ts.max_duration else 0.0,
-            })
-
-        return {
-            "total": stats.total,
-            "success_rate": stats.success_rate(),
-            "by_result": list(stats.by_result.most_common()),
-            "durations_summary": ds,
-            "hist_linear": hist_linear,
-            "hist_log": hist_log,
-            "cdf": cdf,
-            "by_thread": by_thread,
-        }
-
     def event_class(self, tc: JfrEvent) -> str:
         t = (tc.event_type or "").lower()
 
@@ -463,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
         span = max(axis_end - axis_start, 1.0)
 
         by_thread: dict[str, list] = defaultdict(list)
-        for ev in g.ALL_EVENTS:
+        for ev in g.TEST_EVENTS:
             by_thread[ev.thread_name or "<unknown>"].append(ev)
 
         threads_data = []
@@ -497,6 +450,5 @@ class Handler(BaseHTTPRequestHandler):
             "axis_end_ms": axis_end,
             "axis_start": fmt_dt(g.GLOBAL_MIN),
             "axis_end": fmt_dt(g.GLOBAL_MAX),
-            "ticks": make_ticks(axis_start, axis_end, n=20),
             "threads": threads_data,
         }

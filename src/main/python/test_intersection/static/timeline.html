@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>JFR timeline</title>
+
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<!-- =========================================================================
+     СЕКЦИЯ 4. Таймлайн по потокам
+     ========================================================================= -->
+
+<div class="group-selector">
+  <h3>Таймлайн по потокам</h3>
+
+  <!--
+    Панель управления:
+      #tlSearch      — поиск по имени события, подсвечивает совпадения.
+      #tlToStart     — прыжок в начало оси.
+      #tlToEnd       — прыжок в конец оси.
+      #tlZoom1/10/100 — предустановленный зум к центру.
+      #tlZoomReset   — вернуть весь диапазон.
+      #tlZoomInfo    — текстом текущий масштаб и видимый интервал.
+  -->
+  <div class="timeline-toolbar">
+    <input id="tlSearch"
+           placeholder="Поиск по имени события..."
+           autocomplete="off">
+
+    <button type="button" id="tlToStart" title="В начало">⏮</button>
+    <button type="button" id="tlToEnd"   title="В конец">⏭</button>
+
+    <button type="button" id="tlZoom1">×1</button>
+    <button type="button" id="tlZoom10">×10</button>
+    <button type="button" id="tlZoom100">×100</button>
+    <button type="button" id="tlZoomReset">Сбросить</button>
+
+    <span id="tlZoomInfo" class="zoom-info"></span>
+  </div>
+
+  <!--
+    Сам таймлайн. Каждая дорожка = поток (thread_name).
+    Наполняется из threads.js: renderThreadsTimeline().
+
+    #tlInner — обёртка с position: relative, чтобы:
+      - #tlGrid (сетка) позиционировался от неё;
+      - линии сетки шли от верха до низа всей области дорожек.
+
+    #tlGrid идёт ПЕРЕД #tlThreads, чтобы z-index: 0 у сетки
+    был ниже z-index: 1 у баров — бары визуально поверх сетки.
+  -->
+  <div class="timeline-scroll" id="tlScroll">
+    <div class="timeline-inner" id="tlInner">
+      <div class="tl-grid-layer" id="tlGrid"></div>
+      <div id="tlThreads"></div>
+      <div id="tlAxis"></div>
+    </div>
+  </div>
+
+  <!--
+    Мини-карта (overview) — тонкая полоса с прямоугольником видимой области.
+    Позволяет видеть, где ты находишься на всей оси, и прыгать/тащить окно.
+    Наполняется из threads.js: updateOverviewWindow().
+  -->
+  <div class="timeline-overview" id="tlOverview">
+    <div class="timeline-overview-window" id="tlOverviewWindow"></div>
+  </div>
+</div>
+
+
+<!--
+  Подключение JS в самом низу <body>:
+    - DOM уже построен, все getElementById(...) вернут реальные элементы.
+    - threads.js — секция 4 (таймлайн по потокам с зумом и мини-картой).
+-->
+<script src="/threads.js"></script>
+
+</body>
+</html>
