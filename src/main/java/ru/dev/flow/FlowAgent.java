@@ -59,9 +59,8 @@ public class FlowAgent {
             var flowTypeMatchers = new FlowGenericMatchers.FlowTypeMatchers();
             agentBuilder = agentBuilder.type(flowTypeMatchers.filter(CONFIG))
                     .transform((builder, type, loader, module, pd) ->
-                            builder.method(flowMethodMatchers.filter(CONFIG))
-                                    .intercept(Advice.to(FlowAdvice.class))
-                    );
+                            builder.visit(Advice.to(FlowAdvice.class)
+                                            .on(flowMethodMatchers.filter(CONFIG))));
         }
         if (options.isSpringJfr()) {
             System.err.println("spring-jfr=true, registering SpringApplication transformer");
