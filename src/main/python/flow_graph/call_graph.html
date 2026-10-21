@@ -1,169 +1,119 @@
-<html>
-    <head>
-        <meta charset="utf-8">
-        
-            <script src="lib/bindings/utils.js"></script>
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-            
-        
-<center>
-<h1></h1>
-</center>
-
-<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
-<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
-        <link
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
-          rel="stylesheet"
-          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
-          crossorigin="anonymous"
-        />
-        <script
-          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
-          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
-          crossorigin="anonymous"
-        ></script>
-
-
-        <center>
-          <h1></h1>
-        </center>
-        <style type="text/css">
-
-             #mynetwork {
-                 width: 100%;
-                 height: 1400px;
-                 background-color: #ffffff;
-                 border: 1px solid lightgray;
-                 position: relative;
-                 float: left;
-             }
-
-             
-
-             
-
-             
-        </style>
-    </head>
-
-
-    <body>
-        <div class="card" style="width: 100%">
-            
-            
-            <div id="mynetwork" class="card-body"></div>
-        </div>
-
-        
-        
-
-        <script type="text/javascript">
-
-              // initialize global variables.
-              var edges;
-              var nodes;
-              var allNodes;
-              var allEdges;
-              var nodeColors;
-              var originalNodes;
-              var network;
-              var container;
-              var options, data;
-              var filter = {
-                  item : '',
-                  property : '',
-                  value : []
-              };
-
-              
-
-              
-
-              // This method is responsible for drawing the graph, returns the drawn network
-              function drawGraph() {
-                  var container = document.getElementById('mynetwork');
-
-                  
-
-                  // parsing and collecting nodes and edges from the python
-                  nodes = new vis.DataSet([{"borderWidth": 3, "color": {"background": "#a8d5a8", "border": "#4363d8"}, "font": {"color": "#222222"}, "id": "com.app.Cache#get", "label": "Cache\nget", "shape": "box", "title": "com.app.Cache.get\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 6\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-worker-1: 2\n  \u2022 thread-worker-3: 2\n  \u2022 thread-main: 1\n  \u2022 thread-seq: 1"}, {"borderWidth": 3, "color": {"background": "#a8d5a8", "border": "#e6194b"}, "font": {"color": "#222222"}, "id": "com.app.Logger#info", "label": "Logger\ninfo", "shape": "box", "title": "com.app.Logger.info\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 5\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-main: 1\n  \u2022 thread-worker-1: 1\n  \u2022 thread-worker-2: 1\n  \u2022 thread-worker-3: 1\n  \u2022 thread-seq: 1"}, {"borderWidth": 3, "color": {"background": "#a8d5a8", "border": "#4363d8"}, "font": {"color": "#222222"}, "id": "com.app.Validator#check", "label": "Validator\ncheck", "shape": "box", "title": "com.app.Validator.check\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 4\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-worker-1: 1\n  \u2022 thread-worker-2: 1\n  \u2022 thread-worker-3: 1\n  \u2022 thread-seq: 1"}, {"borderWidth": 3, "color": {"background": "#a8d5a8", "border": "#e6194b"}, "font": {"color": "#222222"}, "id": "com.app.Pool#submit", "label": "Pool\nsubmit", "shape": "box", "title": "com.app.Pool.submit\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 1\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-main: 1"}, {"borderWidth": 3, "color": {"background": "#e8f0fe", "border": "#e6194b"}, "font": {"color": "#222222"}, "id": "com.app.Main#main", "label": "Main\nmain", "shape": "box", "title": "com.app.Main.main\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 1\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-main: 1"}, {"borderWidth": 3, "color": {"background": "#8fb3f5", "border": "#4363d8"}, "font": {"color": "#222222"}, "id": "com.app.Repo#find", "label": "Repo\nfind", "shape": "box", "title": "com.app.Repo.find\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 2\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-worker-1: 1\n  \u2022 thread-worker-3: 1"}, {"borderWidth": 3, "color": {"background": "#8fb3f5", "border": "#e6194b"}, "font": {"color": "#222222"}, "id": "com.app.Router#accept", "label": "Router\naccept", "shape": "box", "title": "com.app.Router.accept\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 4\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-main: 4"}, {"borderWidth": 3, "color": {"background": "#a8d5a8", "border": "#4363d8"}, "font": {"color": "#222222"}, "id": "com.app.Files#read", "label": "Files\nread", "shape": "box", "title": "com.app.Files.read\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 2\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-worker-1: 1\n  \u2022 thread-worker-3: 1"}, {"borderWidth": 3, "color": {"background": "#a8d5a8", "border": "#911eb4"}, "font": {"color": "#222222"}, "id": "com.app.Pool#borrow", "label": "Pool\nborrow", "shape": "box", "title": "com.app.Pool.borrow\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 1\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-worker-3: 1"}, {"borderWidth": 3, "color": {"background": "#8fb3f5", "border": "#e6194b"}, "font": {"color": "#222222"}, "id": "com.app.Handler#handle", "label": "Handler\nhandle", "shape": "box", "title": "com.app.Handler.handle\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 5\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-main: 2\n  \u2022 thread-worker-1: 1\n  \u2022 thread-worker-2: 1\n  \u2022 thread-worker-3: 1"}, {"borderWidth": 3, "color": {"background": "#8fb3f5", "border": "#e6194b"}, "font": {"color": "#222222"}, "id": "com.app.Server#run", "label": "Server\nrun", "shape": "box", "title": "com.app.Server.run\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 1\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-main: 1"}, {"borderWidth": 3, "color": {"background": "#8fb3f5", "border": "#3cb44b"}, "font": {"color": "#222222"}, "id": "com.app.Service#process", "label": "Service\nprocess", "shape": "box", "title": "com.app.Service.process\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 6\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-seq: 2\n  \u2022 thread-main: 1\n  \u2022 thread-worker-1: 1\n  \u2022 thread-worker-2: 1\n  \u2022 thread-worker-3: 1"}, {"borderWidth": 3, "color": {"background": "#8fb3f5", "border": "#4363d8"}, "font": {"color": "#222222"}, "id": "com.app.Db#query", "label": "Db\nquery", "shape": "box", "title": "com.app.Db.query\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 2\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-worker-1: 1\n  \u2022 thread-worker-3: 1"}, {"borderWidth": 3, "color": {"background": "#e8f0fe", "border": "#e6194b"}, "font": {"color": "#222222"}, "id": "com.app.Bootstrap#start", "label": "Bootstrap\nstart", "shape": "box", "title": "com.app.Bootstrap.start\n\u0412\u044b\u0437\u043e\u0432\u043e\u0432: 1\n\u041f\u043e\u0442\u043e\u043a\u0438:\n  \u2022 thread-main: 1"}, {"borderWidth": 3, "color": {"background": "#e8f0fe", "border": "#888888"}, "font": {"color": "#222222"}, "id": "com.app.Mystery#ghost", "label": "Mystery\nghost", "shape": "box", "title": "com.app.Mystery.ghost"}]);
-                  edges = new vis.DataSet([{"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Main#main", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Main.main -\u003e com.app.Bootstrap.start", "to": "com.app.Bootstrap#start", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Bootstrap#start", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Bootstrap.start -\u003e com.app.Server.run", "to": "com.app.Server#run", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Server#run", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Server.run -\u003e com.app.Router.accept", "to": "com.app.Router#accept", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Server#run", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Server.run -\u003e com.app.Pool.submit", "to": "com.app.Pool#submit", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Router#accept", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Router.accept -\u003e com.app.Handler.handle", "to": "com.app.Handler#handle", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Router#accept", "selfReferenceSize": 20, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Router.accept -\u003e com.app.Router.accept", "to": "com.app.Router#accept", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Handler#handle", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Handler.handle -\u003e com.app.Logger.info", "to": "com.app.Logger#info", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Handler#handle", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Handler.handle -\u003e com.app.Service.process", "to": "com.app.Service#process", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Service#process", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Service.process -\u003e com.app.Cache.get", "to": "com.app.Cache#get", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Service#process", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Service.process -\u003e com.app.Repo.find", "to": "com.app.Repo#find", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Service#process", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Service.process -\u003e com.app.Validator.check", "to": "com.app.Validator#check", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Repo#find", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Repo.find -\u003e com.app.Db.query", "to": "com.app.Db#query", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Repo#find", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Repo.find -\u003e com.app.Cache.get", "to": "com.app.Cache#get", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Db#query", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Db.query -\u003e com.app.Pool.borrow", "to": "com.app.Pool#borrow", "width": 1.5}, {"arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "dashes": false, "from": "com.app.Db#query", "selfReferenceSize": 0, "title": "[\u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432]\ncom.app.Db.query -\u003e com.app.Files.read", "to": "com.app.Files#read", "width": 1.5}, {"arrows": "to", "color": {"color": "#e6194b", "highlight": "#a00030"}, "dashes": [6, 4], "from": "com.app.Cache#get", "selfReferenceSize": 0, "title": "[\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432, \u044d\u0432\u0440\u0438\u0441\u0442\u0438\u043a\u0430]\ncom.app.Cache.get -\u003e com.app.Logger.info", "to": "com.app.Logger#info", "width": 1.2}, {"arrows": "to", "color": {"color": "#e6194b", "highlight": "#a00030"}, "dashes": [6, 4], "from": "com.app.Logger#info", "selfReferenceSize": 0, "title": "[\u043f\u043e\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u0432\u044b\u0437\u043e\u0432, \u044d\u0432\u0440\u0438\u0441\u0442\u0438\u043a\u0430]\ncom.app.Logger.info -\u003e com.app.Service.process", "to": "com.app.Service#process", "width": 1.2}]);
-
-                  nodeColors = {};
-                  allNodes = nodes.get({ returnType: "Object" });
-                  for (nodeId in allNodes) {
-                    nodeColors[nodeId] = allNodes[nodeId].color;
-                  }
-                  allEdges = edges.get({ returnType: "Object" });
-                  // adding nodes and edges to the graph
-                  data = {nodes: nodes, edges: edges};
-
-                  var options = {"physics": {"enabled": false}, "edges": {"smooth": {"type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4}, "arrowStrikethrough": false, "width": 1.2}, "nodes": {"margin": 10, "widthConstraint": {"maximum": 220}, "font": {"size": 13, "face": "Consolas,monospace"}}, "interaction": {"hover": true, "tooltipDelay": 120, "navigationButtons": true, "keyboard": {"enabled": true}, "multiselect": true}, "layout": {"hierarchical": {"enabled": true, "direction": "UD", "sortMethod": "directed", "levelSeparation": 150, "nodeSpacing": 120, "treeSpacing": 200, "blockShifting": true, "edgeMinimization": true, "parentCentralization": true, "shakeTowards": "roots"}}, "groups": {}};
-
-                  
-
-
-                  
-
-                  network = new vis.Network(container, data, options);
-
-                  
-
-                  
-
-                  
-
-
-                  
-
-                  return network;
-
-              }
-              drawGraph();
-        </script>
-    
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Flow call graphs by thread</title>
+<script type="text/javascript"
+  src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <style>
-#thread-legend {
-  position: fixed; top: 12px; right: 12px; z-index: 9999;
-  background: rgba(255,255,255,0.96); border: 1px solid #ccc;
-  border-radius: 8px; padding: 10px 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-  font-family: Consolas, monospace; font-size: 12px;
-  max-height: 85vh; overflow-y: auto; min-width: 220px;
-}
-#thread-legend h3 { margin: 0 0 6px 0; font-size: 13px; }
-#thread-legend .hint { color: #666; font-size: 11px; margin-bottom: 8px; }
-#thread-legend .thread-item {
-  display: flex; align-items: center; gap: 8px; margin: 3px 0;
-}
-#thread-legend .swatch {
-  display: inline-block; width: 14px; height: 14px;
-  border-radius: 3px; border: 1px solid #999; flex-shrink: 0;
-}
-#thread-legend .name { word-break: break-all; }
-#thread-legend .edge-legend {
-  margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd;
-}
-#thread-legend .edge-item {
-  display: flex; align-items: center; gap: 8px; margin: 4px 0;
-}
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Consolas, monospace;
+    background: #f5f7fa;
+    color: #222;
+  }
+  #tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 12px;
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .tab {
+    padding: 6px 14px;
+    border: 1px solid #ccc;
+    border-radius: 6px 6px 0 0;
+    background: #fafafa;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: Consolas, monospace;
+    white-space: nowrap;
+  }
+  .tab:hover { background: #eef3ff; }
+  .tab.active {
+    background: #4363d8;
+    color: #fff;
+    border-color: #4363d8;
+  }
+  .tab .badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.12);
+    font-size: 11px;
+  }
+  .tab.active .badge { background: rgba(255,255,255,0.25); }
+
+  #controls {
+    padding: 8px 12px;
+    background: #fff;
+    border-bottom: 1px solid #eee;
+    font-size: 12px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  #controls label { display: flex; align-items: center; gap: 4px; }
+
+  .graph-container {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 120px);
+  }
+  .graph-canvas {
+    width: 100%;
+    height: 100%;
+    display: none;
+  }
+  .graph-canvas.active { display: block; }
+
+  #legend {
+    position: fixed;
+    top: 110px;
+    right: 16px;
+    z-index: 20;
+    background: rgba(255,255,255,0.97);
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    max-height: 60vh;
+    overflow-y: auto;
+    min-width: 200px;
+  }
+  #legend h3 { margin: 0 0 6px 0; font-size: 13px; }
+  #legend .edge-item {
+    display: flex; align-items: center; gap: 8px; margin: 4px 0;
+  }
 </style>
-<div id="thread-legend">
-  <h3>Потоки (5)</h3>
-  <div class="hint">Цвет рамки узла = доминирующий поток</div>
-  <div class="thread-item"><span class="swatch" style="background:#e6194b"></span><span class="name">thread-main</span></div>
-<div class="thread-item"><span class="swatch" style="background:#3cb44b"></span><span class="name">thread-seq</span></div>
-<div class="thread-item"><span class="swatch" style="background:#4363d8"></span><span class="name">thread-worker-1</span></div>
-<div class="thread-item"><span class="swatch" style="background:#f58231"></span><span class="name">thread-worker-2</span></div>
-<div class="thread-item"><span class="swatch" style="background:#911eb4"></span><span class="name">thread-worker-3</span></div>
-  
-<div class="edge-legend">
+</head>
+<body>
+
+<div id="tabs"></div>
+
+<div id="controls">
+  <label>
+    <input type="checkbox" id="cb-seq" checked>
+    показывать последовательные рёбра (эвристика)
+  </label>
+</div>
+
+<div class="graph-container" id="graphs"></div>
+
+<div id="legend">
+  <h3>Легенда</h3>
   <div class="edge-item">
     <svg width="40" height="10"><line x1="0" y1="5" x2="40" y2="5"
       stroke="#555" stroke-width="2"/></svg>
-    <span>вложенный вызов (реальный)</span>
+    <span>вложенный вызов</span>
   </div>
   <div class="edge-item">
     <svg width="40" height="10"><line x1="0" y1="5" x2="40" y2="5"
@@ -172,7 +122,140 @@
   </div>
 </div>
 
-</div>
+<script>
+// Данные инжектируются из Python: массив по потокам
+const THREAD_GRAPHS = [{"thread_id": "thread-main", "nodes": [{"id": "com.app.Bootstrap#start", "label": "Bootstrap\nstart", "title": "com.app.Bootstrap.start\nпоток: thread-main", "shape": "box", "color": {"background": "#e8f0fe", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Cache#get", "label": "Cache\nget", "title": "com.app.Cache.get\nпоток: thread-main", "shape": "box", "color": {"background": "#a8d5a8", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Handler#handle", "label": "Handler\nhandle", "title": "com.app.Handler.handle\nпоток: thread-main", "shape": "box", "color": {"background": "#8fb3f5", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Logger#info", "label": "Logger\ninfo", "title": "com.app.Logger.info\nпоток: thread-main", "shape": "box", "color": {"background": "#a8d5a8", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Main#main", "label": "Main\nmain", "title": "com.app.Main.main\nпоток: thread-main", "shape": "box", "color": {"background": "#e8f0fe", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Pool#submit", "label": "Pool\nsubmit", "title": "com.app.Pool.submit\nпоток: thread-main", "shape": "box", "color": {"background": "#a8d5a8", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Router#accept", "label": "Router\naccept", "title": "com.app.Router.accept\nпоток: thread-main", "shape": "box", "color": {"background": "#8fb3f5", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Server#run", "label": "Server\nrun", "title": "com.app.Server.run\nпоток: thread-main", "shape": "box", "color": {"background": "#8fb3f5", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Service#process", "label": "Service\nprocess", "title": "com.app.Service.process\nпоток: thread-main", "shape": "box", "color": {"background": "#e8f0fe", "border": "#e6194b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}], "edges": [{"from": "com.app.Main#main", "to": "com.app.Bootstrap#start", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Main.main -> com.app.Bootstrap.start", "kind": "nested"}, {"from": "com.app.Bootstrap#start", "to": "com.app.Server#run", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Bootstrap.start -> com.app.Server.run", "kind": "nested"}, {"from": "com.app.Server#run", "to": "com.app.Pool#submit", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Server.run -> com.app.Pool.submit", "kind": "nested"}, {"from": "com.app.Server#run", "to": "com.app.Router#accept", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Server.run -> com.app.Router.accept", "kind": "nested"}, {"from": "com.app.Router#accept", "to": "com.app.Router#accept", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Router.accept -> com.app.Router.accept", "kind": "nested"}, {"from": "com.app.Router#accept", "to": "com.app.Handler#handle", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Router.accept -> com.app.Handler.handle", "kind": "nested"}, {"from": "com.app.Handler#handle", "to": "com.app.Logger#info", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Logger.info", "kind": "nested"}, {"from": "com.app.Handler#handle", "to": "com.app.Service#process", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Service.process", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Cache#get", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Cache.get", "kind": "nested"}]}, {"thread_id": "thread-worker-1", "nodes": [{"id": "com.app.Cache#get", "label": "Cache\nget", "title": "com.app.Cache.get\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#a8d5a8", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Db#query", "label": "Db\nquery", "title": "com.app.Db.query\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#e8f0fe", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Files#read", "label": "Files\nread", "title": "com.app.Files.read\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#a8d5a8", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Handler#handle", "label": "Handler\nhandle", "title": "com.app.Handler.handle\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#e8f0fe", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Logger#info", "label": "Logger\ninfo", "title": "com.app.Logger.info\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#a8d5a8", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Repo#find", "label": "Repo\nfind", "title": "com.app.Repo.find\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#8fb3f5", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Service#process", "label": "Service\nprocess", "title": "com.app.Service.process\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#8fb3f5", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Validator#check", "label": "Validator\ncheck", "title": "com.app.Validator.check\nпоток: thread-worker-1", "shape": "box", "color": {"background": "#a8d5a8", "border": "#3cb44b"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}], "edges": [{"from": "com.app.Handler#handle", "to": "com.app.Logger#info", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Logger.info", "kind": "nested"}, {"from": "com.app.Handler#handle", "to": "com.app.Service#process", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Service.process", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Validator#check", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Validator.check", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Repo#find", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Repo.find", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Cache#get", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Cache.get", "kind": "nested"}, {"from": "com.app.Repo#find", "to": "com.app.Db#query", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Repo.find -> com.app.Db.query", "kind": "nested"}, {"from": "com.app.Repo#find", "to": "com.app.Cache#get", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Repo.find -> com.app.Cache.get", "kind": "nested"}, {"from": "com.app.Db#query", "to": "com.app.Files#read", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Db.query -> com.app.Files.read", "kind": "nested"}]}, {"thread_id": "thread-worker-2", "nodes": [{"id": "com.app.Handler#handle", "label": "Handler\nhandle", "title": "com.app.Handler.handle\nпоток: thread-worker-2", "shape": "box", "color": {"background": "#e8f0fe", "border": "#4363d8"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Logger#info", "label": "Logger\ninfo", "title": "com.app.Logger.info\nпоток: thread-worker-2", "shape": "box", "color": {"background": "#a8d5a8", "border": "#4363d8"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Service#process", "label": "Service\nprocess", "title": "com.app.Service.process\nпоток: thread-worker-2", "shape": "box", "color": {"background": "#e8f0fe", "border": "#4363d8"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Validator#check", "label": "Validator\ncheck", "title": "com.app.Validator.check\nпоток: thread-worker-2", "shape": "box", "color": {"background": "#a8d5a8", "border": "#4363d8"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}], "edges": [{"from": "com.app.Handler#handle", "to": "com.app.Logger#info", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Logger.info", "kind": "nested"}, {"from": "com.app.Handler#handle", "to": "com.app.Service#process", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Service.process", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Validator#check", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Validator.check", "kind": "nested"}]}, {"thread_id": "thread-worker-3", "nodes": [{"id": "com.app.Cache#get", "label": "Cache\nget", "title": "com.app.Cache.get\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#a8d5a8", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Db#query", "label": "Db\nquery", "title": "com.app.Db.query\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#8fb3f5", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Files#read", "label": "Files\nread", "title": "com.app.Files.read\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#a8d5a8", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Handler#handle", "label": "Handler\nhandle", "title": "com.app.Handler.handle\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#e8f0fe", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Logger#info", "label": "Logger\ninfo", "title": "com.app.Logger.info\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#a8d5a8", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Pool#borrow", "label": "Pool\nborrow", "title": "com.app.Pool.borrow\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#a8d5a8", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Repo#find", "label": "Repo\nfind", "title": "com.app.Repo.find\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#8fb3f5", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Service#process", "label": "Service\nprocess", "title": "com.app.Service.process\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#8fb3f5", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Validator#check", "label": "Validator\ncheck", "title": "com.app.Validator.check\nпоток: thread-worker-3", "shape": "box", "color": {"background": "#a8d5a8", "border": "#f58231"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}], "edges": [{"from": "com.app.Handler#handle", "to": "com.app.Logger#info", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Logger.info", "kind": "nested"}, {"from": "com.app.Handler#handle", "to": "com.app.Service#process", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Handler.handle -> com.app.Service.process", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Validator#check", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Validator.check", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Repo#find", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Repo.find", "kind": "nested"}, {"from": "com.app.Service#process", "to": "com.app.Cache#get", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Service.process -> com.app.Cache.get", "kind": "nested"}, {"from": "com.app.Repo#find", "to": "com.app.Db#query", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Repo.find -> com.app.Db.query", "kind": "nested"}, {"from": "com.app.Repo#find", "to": "com.app.Cache#get", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Repo.find -> com.app.Cache.get", "kind": "nested"}, {"from": "com.app.Db#query", "to": "com.app.Files#read", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Db.query -> com.app.Files.read", "kind": "nested"}, {"from": "com.app.Db#query", "to": "com.app.Pool#borrow", "arrows": "to", "color": {"color": "#555555", "highlight": "#000000"}, "width": 1.5, "title": "[вложенный] com.app.Db.query -> com.app.Pool.borrow", "kind": "nested"}]}, {"thread_id": "thread-seq", "nodes": [{"id": "com.app.Cache#get", "label": "Cache\nget", "title": "com.app.Cache.get\nпоток: thread-seq", "shape": "box", "color": {"background": "#e8f0fe", "border": "#911eb4"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Logger#info", "label": "Logger\ninfo", "title": "com.app.Logger.info\nпоток: thread-seq", "shape": "box", "color": {"background": "#e8f0fe", "border": "#911eb4"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Service#process", "label": "Service\nprocess", "title": "com.app.Service.process\nпоток: thread-seq", "shape": "box", "color": {"background": "#e8f0fe", "border": "#911eb4"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}, {"id": "com.app.Validator#check", "label": "Validator\ncheck", "title": "com.app.Validator.check\nпоток: thread-seq", "shape": "box", "color": {"background": "#e8f0fe", "border": "#911eb4"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}], "edges": [{"from": "com.app.Service#process", "to": "com.app.Validator#check", "arrows": "to", "color": {"color": "#e6194b", "highlight": "#a00030"}, "width": 1.2, "dashes": [6, 4], "title": "[последовательный] com.app.Service.process -> com.app.Validator.check", "kind": "sequential"}, {"from": "com.app.Service#process", "to": "com.app.Cache#get", "arrows": "to", "color": {"color": "#e6194b", "highlight": "#a00030"}, "width": 1.2, "dashes": [6, 4], "title": "[последовательный] com.app.Service.process -> com.app.Cache.get", "kind": "sequential"}, {"from": "com.app.Cache#get", "to": "com.app.Logger#info", "arrows": "to", "color": {"color": "#e6194b", "highlight": "#a00030"}, "width": 1.2, "dashes": [6, 4], "title": "[последовательный] com.app.Cache.get -> com.app.Logger.info", "kind": "sequential"}, {"from": "com.app.Logger#info", "to": "com.app.Service#process", "arrows": "to", "color": {"color": "#e6194b", "highlight": "#a00030"}, "width": 1.2, "dashes": [6, 4], "title": "[последовательный] com.app.Logger.info -> com.app.Service.process", "kind": "sequential"}]}, {"thread_id": "thread-broken", "nodes": [{"id": "com.app.Mystery#ghost", "label": "Mystery\nghost", "title": "com.app.Mystery.ghost\nпоток: thread-broken", "shape": "box", "color": {"background": "#e8f0fe", "border": "#42d4f4"}, "borderWidth": 3, "font": {"size": 13, "face": "Consolas, monospace"}}], "edges": []}];
+const SEQ_ENABLED_DEFAULT = true;
 
+// Глобальный реестр: thread_id -> {nodes, edges, network, ...}
+const registry = {};
+
+function makeNetwork(containerId, threadData) {
+  const nodes = new vis.DataSet(threadData.nodes);
+  const edges = new vis.DataSet(
+    threadData.edges.filter(e => e.kind === 'nested' || SEQ_ENABLED_DEFAULT)
+  );
+
+  const allEdgesByKind = threadData.edges;
+
+  const container = document.getElementById(containerId);
+  const network = new vis.Network(container, {nodes, edges}, {
+    physics: { enabled: false },
+    edges: {
+      smooth: {
+        type: 'cubicBezier',
+        forceDirection: 'vertical',
+        roundness: 0.4,
+      },
+      arrowStrikethrough: false,
+      width: 1.2,
+    },
+    nodes: {
+      margin: 10,
+      widthConstraint: { maximum: 240 },
+      font: { size: 13, face: 'Consolas, monospace' },
+    },
+    interaction: {
+      hover: true,
+      tooltipDelay: 120,
+      navigationButtons: true,
+      keyboard: { enabled: true },
+      multiselect: true,
+    },
+    layout: {
+      hierarchical: {
+        enabled: true,
+        direction: 'UD',
+        sortMethod: 'directed',
+        levelSeparation: 180,
+        nodeSpacing: 280,      // <-- главный параметр против наложений
+        treeSpacing: 320,
+        blockShifting: false,  // чтобы nodeSpacing не «съедался»
+        edgeMinimization: true,
+        parentCentralization: true,
+        shakeTowards: 'roots',
+      },
+    },
+  });
+
+  registry[threadData.thread_id] = {
+    network, nodes, edges, allEdgesByKind,
+  };
+  return network;
+}
+
+function rebuildEdges(threadId, showSeq) {
+  const rec = registry[threadId];
+  if (!rec) return;
+  const filtered = rec.allEdgesByKind.filter(
+    e => e.kind === 'nested' || showSeq
+  );
+  rec.edges.clear();
+  rec.edges.add(filtered);
+}
+
+// --- построение вкладок и canvas ---
+const tabsEl = document.getElementById('tabs');
+const graphsEl = document.getElementById('graphs');
+
+THREAD_GRAPHS.forEach((threadData, idx) => {
+  // кнопка вкладки
+  const tab = document.createElement('div');
+  tab.className = 'tab' + (idx === 0 ? ' active' : '');
+  tab.dataset.threadId = threadData.thread_id;
+  tab.innerHTML = `${threadData.thread_id}` +
+    `<span class="badge">${threadData.nodes.length}</span>`;
+  tab.onclick = () => activateThread(threadData.thread_id);
+  tabsEl.appendChild(tab);
+
+  // canvas
+  const div = document.createElement('div');
+  div.className = 'graph-canvas' + (idx === 0 ? ' active' : '');
+  div.id = 'graph-' + idx;
+  div.style.height = '100%';
+  div.style.width = '100%';
+  div.style.border = '1px solid #ddd';
+  div.style.borderRadius = '6px';
+  div.style.background = '#fff';
+  div.style.margin = '8px';
+  graphsEl.appendChild(div);
+
+  // создаём network
+  makeNetwork(div.id, threadData);
+});
+
+let activeThread = THREAD_GRAPHS.length ? THREAD_GRAPHS[0].thread_id : null;
+
+function activateThread(threadId) {
+  activeThread = threadId;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.threadId === threadId);
+  });
+  THREAD_GRAPHS.forEach((t, idx) => {
+    const el = document.getElementById('graph-' + idx);
+    el.classList.toggle('active', t.thread_id === threadId);
+  });
+  // пересчитать размер — vis.Network не всегда видит смену display
+  const rec = registry[threadId];
+  if (rec) {
+    setTimeout(() => {
+      rec.network.redraw();
+      rec.network.fit();
+    }, 30);
+  }
+}
+
+// переключатель последовательных рёбер
+document.getElementById('cb-seq').addEventListener('change', (e) => {
+  const show = e.target.checked;
+  Object.keys(registry).forEach(tid => rebuildEdges(tid, show));
+});
+
+// при ресайзе окна — пересчитать активный canvas
+window.addEventListener('resize', () => {
+  const rec = registry[activeThread];
+  if (rec) rec.network.redraw();
+});
+</script>
 </body>
 </html>

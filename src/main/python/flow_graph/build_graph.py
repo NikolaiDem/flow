@@ -14,6 +14,7 @@ SAVE_DEMO_JSON   = None
 SHOW_FULL_CLASS  = False
 OPEN_BROWSER     = True
 HIERARCHICAL     = True    # топологическая раскладка сверху вниз
+PER_THREAD = True
 
 # "border" | "cluster" | "none"
 THREAD_MODE      = "border"
@@ -115,320 +116,138 @@ def thread_color_map(thread_ids: list[str]) -> dict[str, str]:
 
 # ---------- 3. Визуализация ----------
 
-def visualize_pyvis(
-    graph: dict[Node, set[Node]],
-    sequential_graph: dict[Node, set[Node]],
-    node_threads: dict[Node, Counter],
-    thread_calls: dict[str, set[Node]],
-    out_path: Path,
-    show_full_class: bool = False,
-    open_browser: bool = True,
-    hierarchical: bool = False,
-    thread_mode: str = "border",
-    show_sequential: bool = True,
-) -> None:
-    from pyvis.network import Network
+def build_per_thread_data(
+    events_by_thread: dict[str, list[dict]],
+    *,
+    show_full_class: bool,
+    show_sequential: bool,
+) -> list[dict]:
+    """
+    Возвращает список payload'ов — по одному на поток, в формате,
+    который ожидает render_by_thread_html().
+    """
+    from collections import Counter, defaultdict
+
+    THREAD_PALETTE = [
+        "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#42d4f4",
+        "#f032e6", "#bfef45", "#fabed4", "#469990", "#dcbeff", "#9a6324",
+    ]
 
     def short_class(name: str) -> str:
         return name if show_full_class else name.rsplit(".", 1)[-1]
 
-    def node_id(n: Node) -> str:
-        return f"{n[0]}#{n[1]}"
-
-    def node_label(n: Node) -> str:
-        return f"{short_class(n[0])}\n{n[1]}"
-
-    def node_title(n: Node) -> str:
-        lines = [f"{n[0]}.{n[1]}"]
-        counter = node_threads.get(n, Counter())
-        if counter:
-            total = sum(counter.values())
-            lines.append(f"Вызовов: {total}")
-            lines.append("Потоки:")
-            for tid, cnt in counter.most_common():
-                lines.append(f"  • {tid}: {cnt}")
-        return "\n".join(lines)
-
-    indeg: dict[Node, int] = defaultdict(int)
-    outdeg: dict[Node, int] = defaultdict(int)
-    for caller, callees in graph.items():
-        outdeg[caller] += len(callees)
-        for c in callees:
-            indeg[c] += 1
-
-    def node_fill(n: Node) -> str:
-        weight = indeg[n] + outdeg[n]
+    def make_node(n, in_deg, out_deg, thread_id, thread_color):
+        # заливка по степени, как раньше
+        weight = in_deg + out_deg
         if weight >= 6:
-            return "#5b8def"
-        if weight >= 3:
-            return "#8fb3f5"
-        if indeg[n] and not outdeg[n]:
-            return "#a8d5a8"
-        return "#e8f0fe"
+            fill = "#5b8def"
+        elif weight >= 3:
+            fill = "#8fb3f5"
+        elif in_deg and not out_deg:
+            fill = "#a8d5a8"
+        else:
+            fill = "#e8f0fe"
+        return {
+            "id": f"{n[0]}#{n[1]}",
+            "label": f"{short_class(n[0])}\n{n[1]}",
+            "title": f"{n[0]}.{n[1]}\nпоток: {thread_id}",
+            "shape": "box",
+            "color": {"background": fill, "border": thread_color},
+            "borderWidth": 3,
+            "font": {"size": 13, "face": "Consolas, monospace"},
+        }
 
-    colors = thread_color_map(list(thread_calls.keys()))
+    result: list[dict] = []
 
-    def dominant_thread(n: Node) -> str | None:
-        counter = node_threads.get(n, Counter())
-        if not counter:
-            return None
-        return counter.most_common(1)[0][0]
+    for t_idx, (thread_id, events) in enumerate(events_by_thread.items()):
+        thread_color = THREAD_PALETTE[t_idx % len(THREAD_PALETTE)]
 
-    def node_border(n: Node) -> str:
-        if thread_mode != "border":
-            return "#888888"
-        tid = dominant_thread(n)
-        return colors.get(tid, "#888888") if tid else "#888888"
+        # прогоняем стек только для этого потока
+        nested = defaultdict(set)
+        sequential = defaultdict(set)
+        nodes_seen: set[Node] = set()
+        stack: list[Node] = []
+        last_root: Node | None = None
 
-    def node_border_width(n: Node) -> float:
-        return 3 if thread_mode == "border" else 1
+        for ev in events:
+            n = (ev["className"], ev["methodName"])
+            ntype = ev["type"].upper()
+            nodes_seen.add(n)
 
-    height = "1400px" if hierarchical else "900px"
+            if ntype == "ENTER":
+                if stack:
+                    nested[stack[-1]].add(n)
+                else:
+                    if last_root is not None and last_root != n:
+                        sequential[last_root].add(n)
+                    last_root = n
+                stack.append(n)
+            elif ntype == "EXIT":
+                if stack and stack[-1] == n:
+                    stack.pop()
+                elif n in stack:
+                    while stack and stack[-1] != n:
+                        stack.pop()
+                    if stack:
+                        stack.pop()
 
-    net = Network(
-        height=height,
-        width="100%",
-        directed=True,
-        notebook=False,
-        bgcolor="#ffffff",
-        font_color="#222222",
-    )
+        # степени для цветовой заливки
+        in_deg = defaultdict(int)
+        out_deg = defaultdict(int)
+        for caller, callees in nested.items():
+            out_deg[caller] += len(callees)
+            for c in callees:
+                in_deg[c] += 1
+        for n in nodes_seen:
+            in_deg[n] += 0
+            out_deg[n] += 0
 
-    all_nodes = set(graph.keys())
-    for callees in graph.values():
-        all_nodes |= callees
-    for callees in sequential_graph.values():
-        all_nodes |= callees
+        nodes_payload = [
+            make_node(n, in_deg[n], out_deg[n], thread_id, thread_color)
+            for n in sorted(nodes_seen)
+        ]
 
-    node_to_cluster: dict[Node, str] = {}
-    if thread_mode == "cluster":
-        for n in all_nodes:
-            tid = dominant_thread(n)
-            if tid is not None:
-                node_to_cluster[n] = tid
+        def eid(n):
+            return f"{n[0]}#{n[1]}"
 
-    for n in all_nodes:
-        kwargs = dict(
-            label=node_label(n),
-            title=node_title(n),
-            shape="box",
-            color={"background": node_fill(n), "border": node_border(n)},
-            borderWidth=node_border_width(n),
-            font={"size": 14, "face": "Consolas, monospace"},
-        )
-        if thread_mode == "cluster" and n in node_to_cluster:
-            kwargs["group"] = node_to_cluster[n]
-        net.add_node(node_id(n), **kwargs)
-
-    # --- реальные (вложенные) рёбра: сплошные ---
-    for caller, callees in graph.items():
-        for callee in callees:
-            is_self = caller == callee
-            net.add_edge(
-                node_id(caller),
-                node_id(callee),
-                arrows="to",
-                color={"color": "#555555", "highlight": "#000000"},
-                width=1.5,
-                title=f"[вложенный вызов]\n"
-                      f"{caller[0]}.{caller[1]} -> {callee[0]}.{callee[1]}",
-                selfReferenceSize=20 if is_self else 0,
-                dashes=False,
-            )
-
-    # --- «последовательные» рёбра: пунктир ---
-    if show_sequential:
-        for caller, callees in sequential_graph.items():
+        edges_payload: list[dict] = []
+        for caller, callees in nested.items():
             for callee in callees:
-                if callee in graph.get(caller, set()):
-                    continue
-                is_self = caller == callee
-                net.add_edge(
-                    node_id(caller),
-                    node_id(callee),
-                    arrows="to",
-                    color={"color": "#e6194b", "highlight": "#a00030"},
-                    width=1.2,
-                    title=f"[последовательный вызов, эвристика]\n"
-                          f"{caller[0]}.{caller[1]} -> {callee[0]}.{callee[1]}",
-                    selfReferenceSize=20 if is_self else 0,
-                    dashes=[6, 4],
-                )
+                edges_payload.append({
+                    "from": eid(caller),
+                    "to": eid(callee),
+                    "arrows": "to",
+                    "color": {"color": "#555555", "highlight": "#000000"},
+                    "width": 1.5,
+                    "title": f"[вложенный] {caller[0]}.{caller[1]} "
+                             f"-> {callee[0]}.{callee[1]}",
+                    "kind": "nested",
+                })
 
-    # --- ОДИН раз выбираем опции в зависимости от режима ---
-    groups_opt = {
-        tid: {"color": {"border": colors[tid], "background": "#ffffff"}}
-        for tid in colors
-    } if thread_mode == "cluster" else {}
+        if show_sequential:
+            for caller, callees in sequential.items():
+                for callee in callees:
+                    if callee in nested.get(caller, set()):
+                        continue
+                    edges_payload.append({
+                        "from": eid(caller),
+                        "to": eid(callee),
+                        "arrows": "to",
+                        "color": {"color": "#e6194b", "highlight": "#a00030"},
+                        "width": 1.2,
+                        "dashes": [6, 4],
+                        "title": f"[последовательный] {caller[0]}.{caller[1]} "
+                                 f"-> {callee[0]}.{callee[1]}",
+                        "kind": "sequential",
+                    })
 
-    common_interaction = {
-        "hover": True,
-        "tooltipDelay": 120,
-        "navigationButtons": True,
-        "keyboard": {"enabled": True},
-        "multiselect": True,
-    }
+        result.append({
+            "thread_id": thread_id,
+            "nodes": nodes_payload,
+            "edges": edges_payload,
+        })
 
-    if hierarchical:
-        options = {
-            "physics": {"enabled": False},
-            "edges": {
-                "smooth": {
-                    "type": "cubicBezier",
-                    "forceDirection": "vertical",
-                    "roundness": 0.4,
-                },
-                "arrowStrikethrough": False,
-                "width": 1.2,
-            },
-            "nodes": {
-                "margin": 10,
-                "widthConstraint": {"maximum": 220},
-                "font": {"size": 13, "face": "Consolas, monospace"},
-            },
-            "interaction": common_interaction,
-            "layout": {
-                "hierarchical": {
-                    "enabled": True,
-                    "direction": "UD",
-                    "sortMethod": "directed",
-                    "levelSeparation": 150,
-                    "nodeSpacing": 120,
-                    "treeSpacing": 200,
-                    "blockShifting": True,
-                    "edgeMinimization": True,
-                    "parentCentralization": True,
-                    "shakeTowards": "roots",
-                }
-            },
-            "groups": groups_opt,
-        }
-    else:
-        options = {
-            "physics": {
-                "enabled": True,
-                "solver": "forceAtlas2Based",
-                "forceAtlas2Based": {
-                    "gravitationalConstant": -80,
-                    "centralGravity": 0.01,
-                    "springLength": 180,
-                    "springConstant": 0.08,
-                    "damping": 0.4,
-                },
-                "stabilization": {"enabled": True, "iterations": 500},
-            },
-            "edges": {
-                "smooth": {"type": "cubicBezier",
-                           "forceDirection": "horizontal"},
-                "arrowStrikethrough": False,
-                "width": 1.2,
-            },
-            "nodes": {"margin": 10, "widthConstraint": {"maximum": 220}},
-            "interaction": common_interaction,
-            "layout": {"hierarchical": {"enabled": False}},
-            "groups": groups_opt,
-        }
-
-    # --- применяем опции ровно ОДИН раз, с fallback для pyvis ---
-    try:
-        net.set_options(json.dumps(options))
-    except AttributeError:
-        net.set_options(options)
-
-    net.write_html(str(out_path), notebook=False, open_browser=False)
-
-    if thread_mode in ("border", "cluster"):
-        _inject_thread_legend(out_path, colors, thread_mode, show_sequential)
-
-    print(f"Saved: {out_path}")
-    print(f"Layout: {'hierarchical (UD)' if hierarchical else 'physics'}, "
-          f"Threads: {len(colors)} (режим: {thread_mode}), "
-          f"sequential edges: {'on' if show_sequential else 'off'}")
-
-    if open_browser:
-        try:
-            webbrowser.open(out_path.resolve().as_uri())
-        except Exception as e:
-            print(f"(не удалось автоматически открыть браузер: {e})")
-
-
-def _inject_thread_legend(html_path: Path, colors: dict[str, str],
-                          thread_mode: str, show_sequential: bool) -> None:
-    if not colors:
-        return
-
-    mode_hint = {
-        "border": "Цвет рамки узла = доминирующий поток",
-        "cluster": "Цвет узла/рамки = поток (группировка)",
-    }.get(thread_mode, "")
-
-    items = "\n".join(
-        f'<div class="thread-item">'
-        f'<span class="swatch" style="background:{color}"></span>'
-        f'<span class="name">{_escape(tid)}</span>'
-        f'</div>'
-        for tid, color in sorted(colors.items())
-    )
-
-    seq_html = ""
-    if show_sequential:
-        seq_html = """
-<div class="edge-legend">
-  <div class="edge-item">
-    <svg width="40" height="10"><line x1="0" y1="5" x2="40" y2="5"
-      stroke="#555" stroke-width="2"/></svg>
-    <span>вложенный вызов (реальный)</span>
-  </div>
-  <div class="edge-item">
-    <svg width="40" height="10"><line x1="0" y1="5" x2="40" y2="5"
-      stroke="#e6194b" stroke-width="2" stroke-dasharray="6,4"/></svg>
-    <span>последовательный (эвристика)</span>
-  </div>
-</div>
-"""
-
-    legend_html = f"""
-<style>
-#thread-legend {{
-  position: fixed; top: 12px; right: 12px; z-index: 9999;
-  background: rgba(255,255,255,0.96); border: 1px solid #ccc;
-  border-radius: 8px; padding: 10px 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-  font-family: Consolas, monospace; font-size: 12px;
-  max-height: 85vh; overflow-y: auto; min-width: 220px;
-}}
-#thread-legend h3 {{ margin: 0 0 6px 0; font-size: 13px; }}
-#thread-legend .hint {{ color: #666; font-size: 11px; margin-bottom: 8px; }}
-#thread-legend .thread-item {{
-  display: flex; align-items: center; gap: 8px; margin: 3px 0;
-}}
-#thread-legend .swatch {{
-  display: inline-block; width: 14px; height: 14px;
-  border-radius: 3px; border: 1px solid #999; flex-shrink: 0;
-}}
-#thread-legend .name {{ word-break: break-all; }}
-#thread-legend .edge-legend {{
-  margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd;
-}}
-#thread-legend .edge-item {{
-  display: flex; align-items: center; gap: 8px; margin: 4px 0;
-}}
-</style>
-<div id="thread-legend">
-  <h3>Потоки ({len(colors)})</h3>
-  <div class="hint">{_escape(mode_hint)}</div>
-  {items}
-  {seq_html}
-</div>
-"""
-
-    text = html_path.read_text(encoding="utf-8")
-    if "</body>" in text:
-        text = text.replace("</body>", legend_html + "\n</body>", 1)
-    else:
-        text += legend_html
-    html_path.write_text(text, encoding="utf-8")
-
+    return result
 
 def _escape(s: str) -> str:
     return (s.replace("&", "&amp;").replace("<", "&lt;")
@@ -544,25 +363,39 @@ def load_or_generate() -> dict[str, list[dict]]:
 
 def main() -> None:
     events_by_thread = load_or_generate()
+
+    # общая сводка (для консоли) — считаем по объединённому графу
     graph, seq_graph, node_threads, thread_calls = build_call_graph(events_by_thread)
-
-    total_nodes = len(graph)
-    total_edges = sum(len(v) for v in graph.values())
-    total_seq   = sum(len(v) for v in seq_graph.values())
     print(f"\nThreads: {len(events_by_thread)}, "
-          f"Nodes: {total_nodes}, "
-          f"Nested edges: {total_edges}, "
-          f"Sequential edges: {total_seq}")
+          f"Nodes: {len(graph)}, "
+          f"Nested edges: {sum(len(v) for v in graph.values())}, "
+          f"Sequential edges: {sum(len(v) for v in seq_graph.values())}")
 
-    visualize_pyvis(
-        graph, seq_graph, node_threads, thread_calls,
-        out_path=OUTPUT_HTML,
+    # payload на каждый поток
+    per_thread = build_per_thread_data(
+        events_by_thread,
         show_full_class=SHOW_FULL_CLASS,
-        open_browser=OPEN_BROWSER,
-        hierarchical=HIERARCHICAL,
-        thread_mode=THREAD_MODE,
         show_sequential=SHOW_SEQUENTIAL,
     )
+
+    from render_html import render_by_thread_html
+
+    render_by_thread_html(
+        per_thread,
+        out_path=OUTPUT_HTML,
+        show_sequential=SHOW_SEQUENTIAL,
+        level_separation=180,
+        node_spacing=280,   # увеличено, чтобы не накладывались
+        tree_spacing=320,
+    )
+
+    print(f"Saved: {OUTPUT_HTML}")
+
+    if OPEN_BROWSER:
+        try:
+            webbrowser.open(OUTPUT_HTML.resolve().as_uri())
+        except Exception as e:
+            print(f"(не удалось открыть браузер: {e})")
 
 
 if __name__ == "__main__":
