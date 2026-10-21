@@ -13,7 +13,7 @@ DEMO_SEED        = 42
 SAVE_DEMO_JSON   = None
 SHOW_FULL_CLASS  = False
 OPEN_BROWSER     = True
-HIERARCHICAL     = False
+HIERARCHICAL     = True    # топологическая раскладка сверху вниз
 
 # "border" | "cluster" | "none"
 THREAD_MODE      = "border"
@@ -43,7 +43,7 @@ def build_call_graph(events_by_thread: dict[str, list[dict]]):
 
     for thread_id, events in events_by_thread.items():
         stack: list[Node] = []
-        last_root: Node | None = None  # последний «корень» (ENTER при пустом стеке)
+        last_root: Node | None = None
 
         for i, ev in enumerate(events):
             node: Node = (ev["className"], ev["methodName"])
@@ -55,14 +55,10 @@ def build_call_graph(events_by_thread: dict[str, list[dict]]):
                 thread_calls[thread_id].add(node)
 
                 if stack:
-                    graph[stack[-1]].add(node)          # вложенный вызов
+                    graph[stack[-1]].add(node)
                 else:
-                    # стек пуст: либо самый первый ENTER, либо после полного EXIT
                     if last_root is not None and last_root != node:
-                        sequential_graph[last_root].add(node)  # «подряд»
-                    # если last_root == node — это повторный вызов того же
-                    # метода подряд; self-loop в последовательном графе
-                    # рисовать не будем, чтобы не плодить шум
+                        sequential_graph[last_root].add(node)
                     last_root = node
 
                 stack.append(node)
@@ -83,8 +79,6 @@ def build_call_graph(events_by_thread: dict[str, list[dict]]):
                     warnings.append(
                         f"[{thread_id}#{i}] EXIT {node} без соответствующего ENTER"
                     )
-                # после EXIT при пустом стеке last_root уже указывает
-                # на завершившийся метод — следующий ENTER станет «следующим»
 
             else:
                 warnings.append(f"[{thread_id}#{i}] неизвестный type={ntype!r}")
@@ -189,9 +183,15 @@ def visualize_pyvis(
     def node_border_width(n: Node) -> float:
         return 3 if thread_mode == "border" else 1
 
+    height = "1400px" if hierarchical else "900px"
+
     net = Network(
-        height="900px", width="100%", directed=True, notebook=False,
-        bgcolor="#ffffff", font_color="#222222",
+        height=height,
+        width="100%",
+        directed=True,
+        notebook=False,
+        bgcolor="#ffffff",
+        font_color="#222222",
     )
 
     all_nodes = set(graph.keys())
@@ -236,11 +236,10 @@ def visualize_pyvis(
                 dashes=False,
             )
 
-    # --- «последовательные» рёбра: пунктир, только если их нет как реальных ---
+    # --- «последовательные» рёбра: пунктир ---
     if show_sequential:
         for caller, callees in sequential_graph.items():
             for callee in callees:
-                # не дублируем ребро, если оно уже есть как вложенное
                 if callee in graph.get(caller, set()):
                     continue
                 is_self = caller == callee
@@ -253,57 +252,97 @@ def visualize_pyvis(
                     title=f"[последовательный вызов, эвристика]\n"
                           f"{caller[0]}.{caller[1]} -> {callee[0]}.{callee[1]}",
                     selfReferenceSize=20 if is_self else 0,
-                    dashes=[6, 4],   # пунктир
+                    dashes=[6, 4],
                 )
 
-    options = {
-        "physics": {
-            "enabled": not hierarchical,
-            "solver": "forceAtlas2Based",
-            "forceAtlas2Based": {
-                "gravitationalConstant": -80,
-                "centralGravity": 0.01,
-                "springLength": 180,
-                "springConstant": 0.08,
-                "damping": 0.4,
-            },
-            "stabilization": {"enabled": True, "iterations": 500},
-        },
-        "edges": {
-            "smooth": {"type": "cubicBezier", "forceDirection": "horizontal"},
-            "arrowStrikethrough": False,
-            "width": 1.2,
-        },
-        "nodes": {"margin": 10, "widthConstraint": {"maximum": 220}},
-        "interaction": {
-            "hover": True,
-            "tooltipDelay": 120,
-            "navigationButtons": True,
-            "keyboard": {"enabled": True},
-            "multiselect": True,
-        },
-        "layout": {
-            "hierarchical": {
-                "enabled": hierarchical,
-                "direction": "LR",
-                "sortMethod": "directed",
-                "levelSeparation": 220,
-                "nodeSpacing": 140,
-            }
-        },
-        "groups": {
-            tid: {"color": {"border": colors[tid], "background": "#ffffff"}}
-            for tid in colors
-        } if thread_mode == "cluster" else {},
+    # --- ОДИН раз выбираем опции в зависимости от режима ---
+    groups_opt = {
+        tid: {"color": {"border": colors[tid], "background": "#ffffff"}}
+        for tid in colors
+    } if thread_mode == "cluster" else {}
+
+    common_interaction = {
+        "hover": True,
+        "tooltipDelay": 120,
+        "navigationButtons": True,
+        "keyboard": {"enabled": True},
+        "multiselect": True,
     }
-    net.set_options(json.dumps(options))
+
+    if hierarchical:
+        options = {
+            "physics": {"enabled": False},
+            "edges": {
+                "smooth": {
+                    "type": "cubicBezier",
+                    "forceDirection": "vertical",
+                    "roundness": 0.4,
+                },
+                "arrowStrikethrough": False,
+                "width": 1.2,
+            },
+            "nodes": {
+                "margin": 10,
+                "widthConstraint": {"maximum": 220},
+                "font": {"size": 13, "face": "Consolas, monospace"},
+            },
+            "interaction": common_interaction,
+            "layout": {
+                "hierarchical": {
+                    "enabled": True,
+                    "direction": "UD",
+                    "sortMethod": "directed",
+                    "levelSeparation": 150,
+                    "nodeSpacing": 120,
+                    "treeSpacing": 200,
+                    "blockShifting": True,
+                    "edgeMinimization": True,
+                    "parentCentralization": True,
+                    "shakeTowards": "roots",
+                }
+            },
+            "groups": groups_opt,
+        }
+    else:
+        options = {
+            "physics": {
+                "enabled": True,
+                "solver": "forceAtlas2Based",
+                "forceAtlas2Based": {
+                    "gravitationalConstant": -80,
+                    "centralGravity": 0.01,
+                    "springLength": 180,
+                    "springConstant": 0.08,
+                    "damping": 0.4,
+                },
+                "stabilization": {"enabled": True, "iterations": 500},
+            },
+            "edges": {
+                "smooth": {"type": "cubicBezier",
+                           "forceDirection": "horizontal"},
+                "arrowStrikethrough": False,
+                "width": 1.2,
+            },
+            "nodes": {"margin": 10, "widthConstraint": {"maximum": 220}},
+            "interaction": common_interaction,
+            "layout": {"hierarchical": {"enabled": False}},
+            "groups": groups_opt,
+        }
+
+    # --- применяем опции ровно ОДИН раз, с fallback для pyvis ---
+    try:
+        net.set_options(json.dumps(options))
+    except AttributeError:
+        net.set_options(options)
+
     net.write_html(str(out_path), notebook=False, open_browser=False)
 
     if thread_mode in ("border", "cluster"):
         _inject_thread_legend(out_path, colors, thread_mode, show_sequential)
 
     print(f"Saved: {out_path}")
-    print(f"Threads: {len(colors)} (режим: {thread_mode}), "
+    print(f"Layout: {'hierarchical (UD)' if hierarchical else 'physics'}, "
+          f"Threads: {len(colors)} (режим: {thread_mode}), "
           f"sequential edges: {'on' if show_sequential else 'off'}")
 
     if open_browser:
@@ -463,8 +502,6 @@ def generate_demo_events(seed: int = 42) -> dict[str, list[dict]]:
             events = events[:-1]
         events_by_thread[f"thread-worker-{i}"] = events
 
-    # Поток с «последовательными» вызовами — как в реальности
-    # (executor последовательно выполняет задачи, но агент не видит пул)
     events_by_thread["thread-seq"] = (
         _seq(("com.app.Service", "process"),
              ("com.app.Cache",   "get"),
