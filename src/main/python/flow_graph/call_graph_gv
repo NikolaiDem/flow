@@ -1,0 +1,50 @@
+digraph calls {
+	fontname=Helvetica nodesep=0.35 rankdir=LR ranksep=0.6
+	node [fillcolor="#e8f0fe" fontname=Helvetica fontsize=10 shape=box style="rounded,filled"]
+	edge [color="#555555" fontname=Helvetica fontsize=9]
+	"com.app.Main#main" [label="Main
+main"]
+	"com.app.Bootstrap#start" [label="Bootstrap
+start"]
+	"com.app.Main#main" -> "com.app.Bootstrap#start"
+	"com.app.Server#run" [label="Server
+run"]
+	"com.app.Bootstrap#start" -> "com.app.Server#run"
+	"com.app.Router#accept" [label="Router
+accept"]
+	"com.app.Server#run" -> "com.app.Router#accept"
+	"com.app.Pool#submit" [label="Pool
+submit"]
+	"com.app.Server#run" -> "com.app.Pool#submit"
+	"com.app.Router#accept" -> "com.app.Router#accept"
+	"com.app.Handler#handle" [label="Handler
+handle"]
+	"com.app.Router#accept" -> "com.app.Handler#handle"
+	"com.app.Service#process" [label="Service
+process"]
+	"com.app.Handler#handle" -> "com.app.Service#process"
+	"com.app.Logger#info" [label="Logger
+info"]
+	"com.app.Handler#handle" -> "com.app.Logger#info"
+	"com.app.Validator#check" [label="Validator
+check"]
+	"com.app.Service#process" -> "com.app.Validator#check"
+	"com.app.Repo#find" [label="Repo
+find"]
+	"com.app.Service#process" -> "com.app.Repo#find"
+	"com.app.Cache#get" [label="Cache
+get"]
+	"com.app.Service#process" -> "com.app.Cache#get"
+	"com.app.Db#query" [label="Db
+query"]
+	"com.app.Repo#find" -> "com.app.Db#query"
+	"com.app.Repo#find" -> "com.app.Cache#get"
+	"com.app.Pool#borrow" [label="Pool
+borrow"]
+	"com.app.Db#query" -> "com.app.Pool#borrow"
+	"com.app.Files#read" [label="Files
+read"]
+	"com.app.Db#query" -> "com.app.Files#read"
+	"com.app.Mystery#ghost" [label="Mystery
+ghost"]
+}
