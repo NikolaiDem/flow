@@ -1,14 +1,11 @@
 package ru.dev.flow.advice;
 
 import net.bytebuddy.asm.Advice;
-import ru.dev.flow.output.Json;
 import ru.dev.flow.stack.CallNode;
 import ru.dev.flow.stack.CallNodeType;
 import ru.dev.flow.stack.Events;
 
 import java.lang.reflect.Method;
-
-import static ru.dev.flow.config.FlowConfig.CONFIG;
 
 public class TestBoundaryAdvice {
 
@@ -33,7 +30,7 @@ public class TestBoundaryAdvice {
         var className = method.getDeclaringClass().getName();
         var methodName = method.getName();
         var testName = className + "." + methodName;
-        Json json = new Json(Events.drainedEvents(), CONFIG.getStackOutput() + "/" + testName + ".json");
-        json.write();
+//        Json json = new Json(Events.drainedEvents(), Path.of(FlowConfig.get().getBootstrap().getStackOutput()) + "/" + testName + ".json");
+//        json.write();
     }
 }

@@ -1,16 +1,15 @@
 package ru.dev.flow.filters;
 
+import ru.dev.flow.config.FlowConfig;
 import ru.dev.flow.config.FlowYamlConfig;
 import ru.dev.flow.stack.CallNode;
 
 import java.util.List;
 
-import static ru.dev.flow.config.FlowConfig.CONFIG;
-
 public class CallNodeFilter {
 
     public static boolean matches(CallNode callNode) {
-        FlowYamlConfig.Match match = CONFIG.getType().getInclude();
+        FlowYamlConfig.Match match = FlowConfig.get().getFlow().getType().getInclude();
         if (match == FlowYamlConfig.Match.EMPTY) {
             return false;
         }

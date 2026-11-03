@@ -9,138 +9,68 @@ import net.bytebuddy.matcher.ElementMatchers;
 import net.bytebuddy.utility.JavaModule;
 import ru.dev.flow.advice.FlowAdvice;
 import ru.dev.flow.advice.SpringApplicationConstructorAdvice;
-import ru.dev.flow.config.AgentOptions;
+import ru.dev.flow.config.FlowConfig;
+import ru.dev.flow.config.FlowLogger;
 import ru.dev.flow.filters.FlowGenericMatchers;
 import ru.dev.flow.output.Json;
 import ru.dev.flow.stack.Events;
 
-import java.io.*;
 import java.lang.instrument.Instrumentation;
+import java.nio.file.Path;
 import java.util.Arrays;
 
 import static net.bytebuddy.matcher.ElementMatchers.isMethod;
 import static net.bytebuddy.matcher.ElementMatchers.nameStartsWith;
-import static ru.dev.flow.config.FlowConfig.CONFIG;
 
 public class FlowAgent {
 
-    static volatile AgentOptions options = AgentOptions.parse(null);
-    public static BufferedWriter FILE_WRITER;
+    private static final FlowLogger log = FlowLogger.get();
+
     static {
-        try {
-            FILE_WRITER = new BufferedWriter(new FileWriter("D://work/logs/flow.log", true));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        Runtime.getRuntime().addShutdownHook(new Thread(log::close));
     }
 
     @SneakyThrows
     public static void premain(String args, Instrumentation inst) {
+        var config = FlowConfig.get();
         var allLoadedClasses = inst.getAllLoadedClasses();
-        FILE_WRITER.write("All Loaded classes");
+        log.debug("All Loaded classes");
         Arrays.stream(allLoadedClasses)
                 .map(Class::getName)
-                .forEach(s -> {
-                    try {
-                        FILE_WRITER.write(s);
-                        FILE_WRITER.newLine();
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-        options = AgentOptions.parse(args);
-        PrintStream printStream = new PrintStream(
-                new FileOutputStream("D://work/logs/flow.log", true)
-        );
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            printStream.flush();
-            printStream.close();
-            try {
-                FILE_WRITER.flush();
-                FILE_WRITER.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }));
+                .forEach(log::debug);
+        var listener = getListener();
         AgentBuilder agentBuilder = new AgentBuilder.Default()
-                //.with(new AgentBuilder.Listener.StreamWriting(printStream))
                 .with(AgentBuilder.TypeStrategy.Default.REDEFINE)
                 .ignore(
                         nameStartsWith("net.bytebuddy.")          // Игнорировать сам Byte Buddy
                                 .or(nameStartsWith("org.slf4j."))          // Игнорировать логирование
                                 .or(nameStartsWith("ru.dev.flow.")) // Игнорировать классы вашего агента
                 )
-                    .with(
-                        new AgentBuilder.Listener.Adapter() {
-                            @Override
-                            public void onTransformation(TypeDescription typeDescription, ClassLoader classLoader, JavaModule module, boolean loaded, DynamicType dynamicType) {
-                                try {
-                                    FILE_WRITER.write("Transformed " + typeDescription);
-                                    FILE_WRITER.newLine();
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            }
+                .with(listener);
 
-                            @Override
-                            public void onIgnored(TypeDescription typeDescription, ClassLoader classLoader, JavaModule module, boolean loaded) {
-                                try {
-                                    FILE_WRITER.write("Ignored " + typeDescription);
-                                    FILE_WRITER.newLine();
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            }
-
-                            @Override
-                            public void onDiscovery(String typeName, ClassLoader classLoader, JavaModule module, boolean loaded) {
-                                try {
-                                    FILE_WRITER.write("Discovered " + typeName);
-                                    FILE_WRITER.newLine();
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            }
-                        }
-                );
-//                .type(nameContains("ru.alfabank"))
-//                .transform((builder, type, classLoader, module, protectionDomain) ->
-//                        builder.visit(Advice.to(FlowAdvice.class).on(isMethod()))
-//                );
-//                .type(nameEndsWith("IT").or(nameEndsWith("Test")))
-//                .transform((builder, type, loader, module, pd) ->
-//                        builder.method(isAnnotatedWith(Test.class))
-//                                .intercept(Advice.to(TestBoundaryAdvice.class))
-//                )
-//                .type(named("ru.alfabank.pc.api.logback.assertion.InMemoryAppender"))
-//                .transform((builder, type, loader, module, pd) ->
-//                        builder.method(named("recording"))
-//                                .intercept(Advice.to(LogRecordingStartAdvice.class))
-//                )
-//                .type(named("ru.alfabank.pc.api.logback.assertion.LogRecording"))
-//                .transform((builder, type, loader, module, pd) ->
-//                        builder.method(named("logs"))
-//                                .intercept(Advice.to(LogRecordingFinishAdvice.class))
-//                );
+        if (config.getAgent().getFlowRecording()) {
+            String stackOutDir = config.getFlow().getStackOutput();
+            if (stackOutDir == null) {
+                throw new IllegalArgumentException("FLOW_AGENT_STACK_OUTPUT is not defined");
+            }
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.err.println("\n=== CALL GRAPH WRITE TO FILE ===");
-            Json json = new Json(Events.events(), CONFIG.getStackOutput());
-            json.write();
-        }));
-        if (options.isFlowRecording()) {
+                Json json = new Json(Events.events(), Path.of(stackOutDir));
+                json.write();
+            }));
             var flowMethodMatchers = new FlowGenericMatchers.FlowMethodMatchers();
             var flowTypeMatchers = new FlowGenericMatchers.FlowTypeMatchers();
-            var typeFilter = flowTypeMatchers.filter(CONFIG);
-            System.err.println("Type filter " + typeFilter);
-            var methodFilter = flowMethodMatchers.filter(CONFIG);
-            System.err.println("Method filter " + methodFilter);
+            var typeFilter = flowTypeMatchers.filter(config);
+            log.debug("Type filter " + typeFilter);
+            var methodFilter = flowMethodMatchers.filter(config);
+            log.debug("Method filter " + methodFilter);
             agentBuilder = agentBuilder.type(typeFilter)
                     .transform((builder, type, loader, module, pd) ->
                             builder.visit(Advice.to(FlowAdvice.class)
-                                            .on(isMethod().and(methodFilter))));
+                                    .on(isMethod().and(methodFilter))));
         }
-        if (options.isSpringJfr()) {
-            System.err.println("spring-jfr=true, registering SpringApplication transformer");
+
+        if (config.getAgent().getSpringJfr()) {
+            log.debug("spring-jfr=true, registering SpringApplication transformer");
             agentBuilder = agentBuilder.type(ElementMatchers.named("org.springframework.boot.SpringApplication"))
                     .transform((builder, type, classLoader, module, protectionDomain) ->
                             builder
@@ -150,5 +80,24 @@ public class FlowAgent {
         }
         agentBuilder
                 .installOn(inst);
+    }
+
+    private static AgentBuilder.Listener.Adapter getListener() {
+        return new AgentBuilder.Listener.Adapter() {
+            @Override
+            public void onTransformation(TypeDescription typeDescription, ClassLoader classLoader, JavaModule module, boolean loaded, DynamicType dynamicType) {
+                log.debug("Transformed " + typeDescription);
+            }
+
+            @Override
+            public void onIgnored(TypeDescription typeDescription, ClassLoader classLoader, JavaModule module, boolean loaded) {
+                log.debug("Ignored " + typeDescription);
+            }
+
+            @Override
+            public void onDiscovery(String typeName, ClassLoader classLoader, JavaModule module, boolean loaded) {
+                log.debug("Discovered " + typeName);
+            }
+        };
     }
 }

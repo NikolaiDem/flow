@@ -1,10 +1,6 @@
 # Flow MVP — Java Agent
 
-Java-агент для записи JFR-событий инициализации Spring-контекста. Не требует изменения кода приложения.
-
-## Что делает
-
-Инструментирует `SpringApplication` и подменяет `ApplicationStartup` на `FlightRecorderApplicationStartup`. Всё, что происходит при загрузке Spring-контекста, попадает в JFR.
+Java-агент для записи JFR-событий и потока выполнения программы.
 
 ## Требования
 
@@ -18,17 +14,19 @@ Java-агент для записи JFR-событий инициализаци�
 mvn clean install
 ```
 
-Результат: `target/flow-mvp-1.0-SNAPSHOT.jar`
+Результат: `target/flow-1.0-SNAPSHOT.jar`
+
+## Конфигурация
+
+Создать flow-config.yml и указать его в системной переменной при подключении агента.
 
 ## Запуск
-
 ```bash
-java -javaagent:/path/to/flow-mvp-1.0-SNAPSHOT.jar=<args> \
-     -XX:StartFlightRecording:filename=context-startup.jfr,duration=60s \
-     -jar your-application.jar
+java -Dflow.config=/flow-config.yml -javaagent:/target/flow-1.0-SNAPSHOT.jar -jar your-application.jar
 ```
 
-`-javaagent` должен идти **до** `-jar`. Без аргументов агент выключен.
+
+
 
 ## Включение Spring-инструментации
 

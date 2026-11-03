@@ -1,12 +1,22 @@
-stack-output: ../stacks
-type:
-  include:
-    start-on:
-      - ru.dev
-  exclude:
-    contains:
-      - ru.dev.flow.filters
-method:
-  exclude:
-    equals:
-      - toString
+bootstrap:
+  log-file: /var/log/flow/agent.log
+  jfr-file: /var/log/flow/context.jfr
+
+agent:
+  spring-jfr: true
+  flow-recording: true
+  verbose: false
+
+flow:
+  stack-output: ../stacks
+  type:
+    include:
+      start-on:
+        - ru.dev
+    exclude:
+      contains:
+        - ru.dev.flow.filters
+  method:
+    exclude:
+      equals:
+        - toString

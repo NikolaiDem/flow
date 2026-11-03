@@ -12,22 +12,68 @@ import java.util.List;
 @ToString
 public class FlowYamlConfig {
 
-    @JsonProperty("stack-output")
-    private String stackOutput;
+    private Bootstrap bootstrap = new Bootstrap();
+    private Agent agent = new Agent();
+    private Flow flow = new Flow();
 
-    private Type type;
-    private Type method;
+    // ---------- bootstrap: пути ----------
 
     @Setter
     @Getter
+    @ToString
+    public static class Bootstrap {
+
+        @JsonProperty("log-file")
+        private String logFile;
+
+        @JsonProperty("jfr-file")
+        private String jfrFile;
+    }
+
+    // ---------- agent: флаги поведения ----------
+
+    @Setter
+    @Getter
+    @ToString
+    public static class Agent {
+
+        @JsonProperty("spring-jfr")
+        private Boolean springJfr;
+
+        @JsonProperty("flow-recording")
+        private Boolean flowRecording;
+
+        private Boolean verbose;
+    }
+
+    // ---------- flow: stack-output + правила ----------
+
+    @Setter
+    @Getter
+    @ToString
+    public static class Flow {
+
+        @JsonProperty("stack-output")
+        private String stackOutput;
+
+        private Type type = new Type();
+        private Type method = new Type();
+    }
+
+    // ---------- type / method ----------
+
+    @Setter
+    @Getter
+    @ToString
     public static class Type {
 
-        private Match include = Match.EMPTY;
-        private Match exclude = Match.EMPTY;
+        private Match include = new Match();
+        private Match exclude = new Match();
     }
 
     @Setter
     @Getter
+    @ToString
     public static class Match {
 
         public static final Match EMPTY = new Match();

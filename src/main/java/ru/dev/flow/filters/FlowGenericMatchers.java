@@ -77,14 +77,14 @@ public interface FlowGenericMatchers<T extends NamedElement> {
     class FlowMethodMatchers implements FlowGenericMatchers<MethodDescription> {
         @Override
         public ElementMatcher.Junction<MethodDescription> filter(FlowYamlConfig cfg) {
-            return filter(cfg.getMethod());
+            return filter(cfg.getFlow().getMethod());
         }
     }
 
     class FlowTypeMatchers implements FlowGenericMatchers<TypeDescription> {
         @Override
         public ElementMatcher.Junction<TypeDescription> filter(FlowYamlConfig cfg) {
-            return filter(cfg.getType());
+            return filter(cfg.getFlow().getType());
         }
     }
 }
