@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from event_parsing import JfrEvent
+from test_intersection.event_parsing import JfrEvent
 
 log = logging.getLogger(__name__)
 

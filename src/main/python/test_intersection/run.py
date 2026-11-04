@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jfr_test_intersection import collect_all
 from jfr_to_json import jfr_to_json
-from main.python.main import serve
+from main import serve
 from test_events import TestCase
 from spring_events import SpringEvent
 

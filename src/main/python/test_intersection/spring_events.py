@@ -34,7 +34,7 @@ from dataclasses import dataclass
 import isodate
 from dateutil import parser as dtparser
 
-from event_parsing import JfrEvent
+from test_intersection.event_parsing import JfrEvent
 
 log = logging.getLogger(__name__)
 

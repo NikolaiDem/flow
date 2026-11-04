@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from collections import defaultdict
-from event_parsing import JfrEvent
+from test_intersection.event_parsing import JfrEvent
 
 log = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #

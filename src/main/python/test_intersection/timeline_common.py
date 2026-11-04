@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from event_parsing import JfrEvent
-from overlaps import Overlap
+from test_intersection.event_parsing import JfrEvent
+from test_intersection.overlaps import Overlap
 
 
 # ---------- базовые утилиты ----------

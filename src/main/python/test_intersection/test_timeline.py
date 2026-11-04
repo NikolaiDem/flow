@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from overlaps import Overlap
-from test_events import TestCase
+from test_intersection.overlaps import Overlap
+from test_intersection.test_events import TestCase
 
-from timeline_common import (
+from test_intersection.timeline_common import (
     fmt_dt,
     make_ticks,
     ts_to_ms,

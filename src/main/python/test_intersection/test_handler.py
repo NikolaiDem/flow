@@ -4,14 +4,14 @@ from __future__ import annotations
 from collections import defaultdict
 
 from timeline_common import fmt_dt, make_ticks, ts_to_ms, result_class
-from event_parsing import JfrEvent
-from test_events import TestCase
+from test_intersection.event_parsing import JfrEvent
+from test_intersection.test_events import TestCase
 
-from test_timeline import (
+from test_intersection.test_timeline import (
     build_timeline as build_tests_timeline,
     test_key,
 )
-from events_timeline import (
+from test_intersection.events_timeline import (
     build_timeline as build_events_timeline,
     event_key,
     make_row as make_event_row,
