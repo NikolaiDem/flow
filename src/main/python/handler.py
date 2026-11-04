@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 from context import AppContext
-from test_handler import (
+from test_intersection.test_handler import (
     _threads_timeline,
     _mixed_timeline,
     _all_tests,
@@ -17,9 +17,9 @@ from test_handler import (
     _search_events,
     _event_types,
 )
-from test_timeline import build_group_timeline_by_keys as build_tests_group
-from events_timeline import build_group_timeline_by_keys as build_events_group
-from stats.test_stats import build_test_stats
+from test_intersection.test_timeline import build_group_timeline_by_keys as build_tests_group
+from test_intersection.events_timeline import build_group_timeline_by_keys as build_events_group
+from test_intersection.stats.test_stats import build_test_stats
 
 log = logging.getLogger(__name__)
 
