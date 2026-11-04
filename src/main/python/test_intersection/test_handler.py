@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from timeline_common import fmt_dt, make_ticks, ts_to_ms, result_class
+from test_intersection.timeline_common import fmt_dt, make_ticks, ts_to_ms, result_class
 from test_intersection.event_parsing import JfrEvent
 from test_intersection.test_events import TestCase
 
