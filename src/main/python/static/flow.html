@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Flow — call graphs</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    /* iframe на почти весь экран; в fullscreen — на весь */
+    #flowFrame {
+      width: 100%;
+      height: calc(100vh - 160px);
+      border: 1px solid #ddd;
+      background: #fff;
+    }
+    /* когда iframe в fullscreen — растянуть на весь экран */
+    #flowFrame:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      border: none;
+    }
+    /* на всякий случай для webkit */
+    #flowFrame:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="/">Главная</a>
+  <a href="/flow" class="active">Flow</a>
+  <a href="/jfr">JFR</a>
+  <a href="/timeline">Timeline</a>
+  <a href="/stats">Stats</a>
+</nav>
+
+<h1>Flow (call graphs)</h1>
+
+<div class="timeline-toolbar">
+  <label for="flowSelect">Граф:</label>
+  <select id="flowSelect"></select>
+  <button type="button" id="flowReload" title="Перечитать список">↻</button>
+  <button type="button" id="flowFullscreen" title="На весь экран">⛶</button>
+  <span id="flowStatus" class="zoom-info"></span>
+</div>
+
+<div id="flowEmpty" class="empty" hidden>Нет сгенерированных графов.</div>
+
+<iframe id="flowFrame"
+        src="about:blank"
+        title="Call graph"></iframe>
+
+<script src="/flow.js"></script>
+</body>
+</html>

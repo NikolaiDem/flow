@@ -41,7 +41,7 @@ pip install -r requirements.txt
 
 ## Настройка JUnit 5 для записи JFR
 
-Для junit version<6 Добавьте в `pom.xml`:
+Для junit version<6 Добавьте в `../../../pom.xml`:
 
 ```xml
 <dependency>
@@ -78,20 +78,12 @@ java \
 
 ## Запуск
 
-Задайте пути в `run.py`:
-
-```python
-jfr_dir = Path("D:/work/jfr")
-json_dir = Path("D:/work/jfr/json")
-```
-
-- `jfr_dir` — каталог с `.jfr`-файлами;
-- `json_dir` — каталог для JSON-версий записей.
+Задайте конфигурацию config.yaml
 
 Запустите:
 
 ```bash
-python run.py
+python main.py --config /path/to/config.yaml
 ```
 
 Скрипт парсит JFR-файлы, ищет пересечения и поднимает веб-страницу. Если JFR-файлов нет — используются демо-данные.
