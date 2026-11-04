@@ -17,6 +17,9 @@ public final class FlowLogger {
     private static final DateTimeFormatter TS =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
+    private static final DateTimeFormatter FILE_TS =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+
     private static final FlowLogger INSTANCE = bootstrap();
 
     private final BufferedWriter writer;   // null → консоль
@@ -32,9 +35,8 @@ public final class FlowLogger {
     }
 
     private static FlowLogger bootstrap() {
-        Path file = resolveLogFile();
+        Path file = resolveLogPath();
         if (file == null) {
-            // путь не задан — консоль
             return new FlowLogger(null, Level.INFO, "console");
         }
         try {
@@ -44,7 +46,6 @@ public final class FlowLogger {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             return new FlowLogger(w, Level.INFO, file.toAbsolutePath().toString());
         } catch (Exception e) {
-            // путь задан, но файл не открылся — fallback в консоль
             System.err.println("[flow-agent] Cannot open log file: " + file
                     + " (" + e.getMessage() + "). Logging to console");
             return new FlowLogger(null, Level.INFO, "console");
@@ -118,22 +119,50 @@ public final class FlowLogger {
 
     // ---------- resolve ----------
 
-    /** Возвращает null, если путь не задан (тогда пишем в консоль). */
-    private static Path resolveLogFile() {
-        String fromEnv = FlowConfig.get().getBootstrap().getLogFile();
-        if (fromEnv != null && !fromEnv.isBlank()) {
-            return logResolved("env", fromEnv);
+    /**
+     * Возвращает полный путь к лог-файлу или null (тогда пишем в консоль).
+     * Приоритет: bootstrap.log-dir (YAML) → -Dflow.log → консоль.
+     */
+    private static Path resolveLogPath() {
+        // 1. YAML: bootstrap.log-dir (директория) — имя генерируется
+        String dirFromYaml = null;
+        try {
+            dirFromYaml = FlowConfig.get().getBootstrap().getLogDir();
+        } catch (Throwable t) {
+            System.err.println("[flow-agent] Cannot read config for log dir: " + t.getMessage());
         }
+        if (dirFromYaml != null && !dirFromYaml.isBlank()) {
+            return buildLogFile("yaml", dirFromYaml);
+        }
+
+        // 2. -Dflow.log (полный путь к файлу — override)
         String fromSys = System.getProperty("flow.log");
         if (fromSys != null && !fromSys.isBlank()) {
-            return logResolved("system property", fromSys);
+            return logResolvedPath("system property", fromSys);
         }
-        // ничего не задано — консоль
-        System.err.println("[flow-agent] Log file not set, logging to console");
+
+        // 3. ничего не задано — консоль
+        System.err.println("[flow-agent] Log dir not set, logging to console");
         return null;
     }
 
-    private static Path logResolved(String source, String value) {
+    /** Строит путь: директория + flow-agent-<timestamp>.log */
+    private static Path buildLogFile(String source, String dirValue) {
+        try {
+            Path dir = Path.of(dirValue.trim());
+            String fileName = "flow-agent-" + FILE_TS.format(LocalDateTime.now()) + ".log";
+            Path file = dir.resolve(fileName);
+            System.err.println("[flow-agent] Log file (" + source + "): " + file.toAbsolutePath());
+            return file;
+        } catch (InvalidPathException e) {
+            System.err.println("[flow-agent] Invalid log dir: \"" + dirValue
+                    + "\" (" + e.getMessage() + "). Logging to console");
+            return null;
+        }
+    }
+
+    /** Для -Dflow.log: трактуем как полный путь к файлу. */
+    private static Path logResolvedPath(String source, String value) {
         try {
             Path p = Path.of(value.trim());
             System.err.println("[flow-agent] Log file (" + source + "): " + p);

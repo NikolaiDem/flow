@@ -23,8 +23,8 @@ public class FlowYamlConfig {
     @ToString
     public static class Bootstrap {
 
-        @JsonProperty("log-file")
-        private String logFile;
+        @JsonProperty("log-dir")
+        private String logDir;
 
         @JsonProperty("jfr-file")
         private String jfrFile;
