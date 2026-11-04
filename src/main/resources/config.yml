@@ -1,5 +1,6 @@
 bootstrap:
   log-dir: /var/log/flow/agent.log
+  log-level: DEBUG
   jfr-file: /var/log/flow/context.jfr
 
 agent:

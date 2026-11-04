@@ -26,6 +26,9 @@ public class FlowYamlConfig {
         @JsonProperty("log-dir")
         private String logDir;
 
+        @JsonProperty("log-level")
+        private String logLevel;    // ← добавить: ERROR | WARN | INFO | DEBUG
+
         @JsonProperty("jfr-file")
         private String jfrFile;
     }
