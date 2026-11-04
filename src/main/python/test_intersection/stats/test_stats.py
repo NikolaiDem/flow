@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from test_intersection.test_events import TestCase
-from stats.stats_hist import build_cdf
-import globals as g
+from test_intersection.stats.stats_hist import build_cdf
+import test_intersection.globals as g
 
 @dataclass
 class ThreadStats:
