@@ -5,9 +5,9 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from event_parsing import JfrEvent
-from test_events import TestCase
-from overlaps import build_overlap_dict
+from test_intersection.event_parsing import JfrEvent
+from test_intersection.test_events import TestCase
+from test_intersection.overlaps import build_overlap_dict
 
 
 class _Unset:
