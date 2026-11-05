@@ -172,16 +172,19 @@ def build_per_thread_data(
     """
     Payload для vis-network. Каждый экземпляр вызова — отдельный узел.
 
-      id    = "Class#method@call_id"     (уникальный)
-      label = "Class\\nmethod #step"      (step — номер шага в логе)
-      title = полный контекст: step, call_id, depth, parent, поток
+      id    = "thread_id:Class#method@call_id"   (глобально уникальный)
+      label = "Class\\nmethod #call_id"          (строго последовательный в потоке:
+                                                 0, 1, 2, 3, ... без пропусков)
+      title = call_id, step, depth, parent, поток
     """
 
     def short_class(name: str) -> str:
         return name if show_full_class else name.rsplit(".", 1)[-1]
 
     def nid(call: Call) -> str:
-        return f"{call.class_name}#{call.method_name}@{call.call_id}"
+        # thread_id в id — чтобы два потока с одинаковым call_id
+        # и одинаковым методом не дали коллизию в vis-network
+        return f"{call.thread_id}:{call.class_name}#{call.method_name}@{call.call_id}"
 
     def make_node(call: Call, in_deg: int, out_deg: int,
                   thread_color: str) -> dict:
@@ -195,9 +198,10 @@ def build_per_thread_data(
         else:
             fill = "#e8f0fe"
 
+        # строго последовательный номер в потоке — call_id
         label = (
             f"{short_class(call.class_name)}\n"
-            f"{call.method_name} #{call.step}"
+            f"{call.method_name} #{call.call_id}"
         )
         parent_txt = (
             str(call.parent_id) if call.parent_id is not None else "root"
@@ -207,8 +211,8 @@ def build_per_thread_data(
             "label": label,
             "title": (
                 f"{call.class_name}.{call.method_name}\n"
-                f"step: {call.step}\n"
                 f"call_id: {call.call_id}\n"
+                f"step: {call.step}\n"
                 f"depth: {call.depth}\n"
                 f"parent: {parent_txt}\n"
                 f"поток: {call.thread_id}"
@@ -271,7 +275,8 @@ def build_per_thread_data(
                     "color": {"color": "#555555", "highlight": "#000000"},
                     "width": 1.5,
                     "title": (
-                        f"[вложенный] step {caller.step} -> step {callee.step}\n"
+                        f"[вложенный] #{caller.call_id} -> #{callee.call_id}\n"
+                        f"step {caller.step} -> step {callee.step}\n"
                         f"{caller.class_name}.{caller.method_name}@{caller.call_id}"
                         f" -> "
                         f"{callee.class_name}.{callee.method_name}@{callee.call_id}"
@@ -279,7 +284,7 @@ def build_per_thread_data(
                     "kind": "nested",
                 })
 
-        # sequential: между корневыми (если нет nested-дубля)
+        # sequential: между корневыми
         if show_sequential:
             for caller_id, callees in sequential.items():
                 caller = calls[caller_id]
@@ -295,7 +300,8 @@ def build_per_thread_data(
                         "width": 1.2,
                         "dashes": [6, 4],
                         "title": (
-                            f"[последовательный] step {caller.step} -> step {callee.step}\n"
+                            f"[последовательный] #{caller.call_id} -> #{callee.call_id}\n"
+                            f"step {caller.step} -> step {callee.step}\n"
                             f"{caller.class_name}.{caller.method_name}@{caller.call_id}"
                             f" -> "
                             f"{callee.class_name}.{callee.method_name}@{callee.call_id}"
