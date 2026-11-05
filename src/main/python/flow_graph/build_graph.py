@@ -5,6 +5,7 @@ import json
 import logging
 import sys
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from flow_graph.config import (
@@ -28,80 +29,139 @@ log = logging.getLogger(__name__)
 
 
 # ============================================================
-# 1. ГРАФ (чистая логика)
+# 0. МОДЕЛЬ: ЭКЗЕМПЛЯР ВЫЗОВА (CALL)
+# ============================================================
+
+@dataclass
+class Call:
+    """Один экземпляр вызова метода."""
+    call_id: int                 # уникальный id в пределах потока (только ENTER)
+    class_name: str
+    method_name: str
+    thread_id: str
+    parent_id: int | None        # call_id вызывающего (None для корневых)
+    depth: int                   # глубина стека в момент ENTER
+    step: int                    # индекс ENTER-события в списке events потока
+    children: list[int] = field(default_factory=list)  # call_id детей
+
+
+# ============================================================
+# 1. ПОСТРОЕНИЕ CALL TREE
+# ============================================================
+
+def build_call_tree(events: list[dict], thread_id: str) -> dict[int, Call]:
+    """
+    Проходит события потока и строит call tree: call_id -> Call.
+
+    - каждый ENTER создаёт новый Call (уникальный call_id)
+    - parent_id = call_id того, кто был на вершине стека в момент ENTER
+      (или None, если стек пуст — корневой вызов)
+    - depth = len(stack) на момент ENTER
+    - step  = индекс ENTER-события в events (хронологический номер)
+
+    При рассинхроне (EXIT не на вершине / EXIT без ENTER) — мягкое закрытие:
+    ищем сверху вниз ближайший call с тем же class+method, удаляем всё от
+    него и выше. Если не нашли — EXIT игнорируется (это норма для
+    частичного инструментирования, не warning).
+    """
+    calls: dict[int, Call] = {}
+    stack: list[int] = []        # call_id активных вызовов
+    next_id = 0
+
+    for i, ev in enumerate(events):
+        class_name = ev["className"]
+        method_name = ev["methodName"]
+        ntype = ev["type"].upper()
+
+        if ntype == "ENTER":
+            call_id = next_id
+            next_id += 1
+            parent_id = stack[-1] if stack else None
+            call = Call(
+                call_id=call_id,
+                class_name=class_name,
+                method_name=method_name,
+                thread_id=thread_id,
+                parent_id=parent_id,
+                depth=len(stack),
+                step=i,
+            )
+            calls[call_id] = call
+            if parent_id is not None:
+                calls[parent_id].children.append(call_id)
+            stack.append(call_id)
+
+        elif ntype == "EXIT":
+            found_idx = None
+            for idx in range(len(stack) - 1, -1, -1):
+                c = calls[stack[idx]]
+                if c.class_name == class_name and c.method_name == method_name:
+                    found_idx = idx
+                    break
+            if found_idx is None:
+                continue
+            del stack[found_idx:]
+
+        else:
+            continue
+
+    return calls
+
+
+# ============================================================
+# 2. ГРАФ (по call tree, уникальные узлы)
 # ============================================================
 
 def build_call_graph(events_by_thread: dict[str, list[dict]]):
     """
-    Возвращает:
-      graph            : caller -> set(callee)            (реальная вложенность)
-      sequential_graph : caller -> set(callee)            (последовательные вызовы)
-      node_threads     : node -> Counter(thread_id -> count)
-      thread_calls     : thread_id -> set(node)
+    Возвращает граф на уровне ЭКЗЕМПЛЯРОВ вызовов (call_id).
+
+      graph            : caller_call_id -> set(callee_call_id)   (вложенность)
+      sequential_graph : caller_call_id -> set(callee_call_id)   (порядок корневых)
+      node_threads     : call_id -> Counter(thread_id -> 1)
+      thread_calls     : thread_id -> set(call_id)
+      calls_by_thread  : thread_id -> {call_id -> Call}
     """
-    graph: dict[Node, set[Node]] = defaultdict(set)
-    sequential_graph: dict[Node, set[Node]] = defaultdict(set)
-    node_threads: dict[Node, Counter] = defaultdict(Counter)
-    thread_calls: dict[str, set[Node]] = defaultdict(set)
-    all_nodes: set[Node] = set()
-    warnings: list[str] = []
+    graph: dict[int, set[int]] = defaultdict(set)
+    sequential_graph: dict[int, set[int]] = defaultdict(set)
+    node_threads: dict[int, Counter] = defaultdict(Counter)
+    thread_calls: dict[str, set[int]] = defaultdict(set)
+    calls_by_thread: dict[str, dict[int, Call]] = {}
 
     for thread_id, events in events_by_thread.items():
-        stack: list[Node] = []
-        last_root: Node | None = None
+        calls = build_call_tree(events, thread_id)
+        calls_by_thread[thread_id] = calls
 
-        for i, ev in enumerate(events):
-            node: Node = (ev["className"], ev["methodName"])
-            ntype = ev["type"].upper()
-            all_nodes.add(node)
+        # вложенность: parent -> child
+        for call in calls.values():
+            node_threads[call.call_id][thread_id] += 1
+            thread_calls[thread_id].add(call.call_id)
+            if call.parent_id is not None:
+                graph[call.parent_id].add(call.call_id)
 
-            if ntype == "ENTER":
-                node_threads[node][thread_id] += 1
-                thread_calls[thread_id].add(node)
+        # последовательность корневых в порядке call_id (он же порядок ENTER)
+        roots = sorted(c.call_id for c in calls.values() if c.parent_id is None)
+        for prev, nxt in zip(roots, roots[1:]):
+            sequential_graph[prev].add(nxt)
 
-                if stack:
-                    graph[stack[-1]].add(node)
-                else:
-                    if last_root is not None and last_root != node:
-                        sequential_graph[last_root].add(node)
-                    last_root = node
+    # гарантируем присутствие всех узлов в обоих графах
+    for calls in calls_by_thread.values():
+        for cid in calls:
+            graph.setdefault(cid, set())
+            sequential_graph.setdefault(cid, set())
 
-                stack.append(node)
+    return (
+        dict(graph),
+        dict(sequential_graph),
+        dict(node_threads),
+        dict(thread_calls),
+        calls_by_thread,
+    )
 
-            elif ntype == "EXIT":
-                if stack and stack[-1] == node:
-                    stack.pop()
-                elif node in stack:
-                    warnings.append(
-                        f"[{thread_id}#{i}] EXIT {node} не на вершине стека "
-                        f"(вершина={stack[-1]}), откат"
-                    )
-                    while stack and stack[-1] != node:
-                        stack.pop()
-                    if stack:
-                        stack.pop()
-                else:
-                    warnings.append(
-                        f"[{thread_id}#{i}] EXIT {node} без соответствующего ENTER"
-                    )
-            else:
-                warnings.append(f"[{thread_id}#{i}] неизвестный type={ntype!r}")
 
-        if stack:
-            warnings.append(
-                f"[{thread_id}] поток завершился с незакрытыми вызовами: "
-                + " -> ".join(f"{c}.{m}" for c, m in stack)
-            )
-
-    for n in all_nodes:
-        graph.setdefault(n, set())
-        sequential_graph.setdefault(n, set())
-
-    for w in warnings:
-        log.warning(w)
-
-    return dict(graph), dict(sequential_graph), dict(node_threads), dict(thread_calls)
-
+# ============================================================
+# 3. PAYLOAD ДЛЯ VIS-NETWORK (уникальные узлы + step)
+# ============================================================
 
 def build_per_thread_data(
     events_by_thread: dict[str, list[dict]],
@@ -109,13 +169,22 @@ def build_per_thread_data(
     show_full_class: bool,
     show_sequential: bool,
 ) -> list[dict]:
-    """Payload для vis-network: по одному элементу на поток."""
+    """
+    Payload для vis-network. Каждый экземпляр вызова — отдельный узел.
+
+      id    = "Class#method@call_id"     (уникальный)
+      label = "Class\\nmethod #step"      (step — номер шага в логе)
+      title = полный контекст: step, call_id, depth, parent, поток
+    """
 
     def short_class(name: str) -> str:
         return name if show_full_class else name.rsplit(".", 1)[-1]
 
-    def make_node(n: Node, in_deg: int, out_deg: int,
-                  thread_id: str, thread_color: str) -> dict:
+    def nid(call: Call) -> str:
+        return f"{call.class_name}#{call.method_name}@{call.call_id}"
+
+    def make_node(call: Call, in_deg: int, out_deg: int,
+                  thread_color: str) -> dict:
         weight = in_deg + out_deg
         if weight >= 6:
             fill = "#5b8def"
@@ -125,95 +194,112 @@ def build_per_thread_data(
             fill = "#a8d5a8"
         else:
             fill = "#e8f0fe"
+
+        label = (
+            f"{short_class(call.class_name)}\n"
+            f"{call.method_name} #{call.step}"
+        )
+        parent_txt = (
+            str(call.parent_id) if call.parent_id is not None else "root"
+        )
         return {
-            "id": f"{n[0]}#{n[1]}",
-            "label": f"{short_class(n[0])}\n{n[1]}",
-            "title": f"{n[0]}.{n[1]}\nпоток: {thread_id}",
+            "id": nid(call),
+            "label": label,
+            "title": (
+                f"{call.class_name}.{call.method_name}\n"
+                f"step: {call.step}\n"
+                f"call_id: {call.call_id}\n"
+                f"depth: {call.depth}\n"
+                f"parent: {parent_txt}\n"
+                f"поток: {call.thread_id}"
+            ),
             "shape": "box",
             "color": {"background": fill, "border": thread_color},
             "borderWidth": 3,
-            "font": {"size": 13, "face": "Consolas, monospace"},
+            "font": {"size": 12, "face": "Consolas, monospace"},
         }
-
-    def eid(n: Node) -> str:
-        return f"{n[0]}#{n[1]}"
 
     result: list[dict] = []
 
     for t_idx, (thread_id, events) in enumerate(events_by_thread.items()):
         thread_color = THREAD_PALETTE[t_idx % len(THREAD_PALETTE)]
 
-        nested: dict[Node, set[Node]] = defaultdict(set)
-        sequential: dict[Node, set[Node]] = defaultdict(set)
-        nodes_seen: set[Node] = set()
-        stack: list[Node] = []
-        last_root: Node | None = None
+        calls = build_call_tree(events, thread_id)
+        if not calls:
+            result.append({"thread_id": thread_id, "nodes": [], "edges": []})
+            continue
 
-        for ev in events:
-            n: Node = (ev["className"], ev["methodName"])
-            ntype = ev["type"].upper()
-            nodes_seen.add(n)
+        # вложенность: parent -> child
+        nested: dict[int, set[int]] = defaultdict(set)
+        for call in calls.values():
+            if call.parent_id is not None:
+                nested[call.parent_id].add(call.call_id)
 
-            if ntype == "ENTER":
-                if stack:
-                    nested[stack[-1]].add(n)
-                else:
-                    if last_root is not None and last_root != n:
-                        sequential[last_root].add(n)
-                    last_root = n
-                stack.append(n)
-            elif ntype == "EXIT":
-                if stack and stack[-1] == n:
-                    stack.pop()
-                elif n in stack:
-                    while stack and stack[-1] != n:
-                        stack.pop()
-                    if stack:
-                        stack.pop()
+        # последовательность корневых
+        sequential: dict[int, set[int]] = defaultdict(set)
+        roots = sorted(c.call_id for c in calls.values() if c.parent_id is None)
+        for prev, nxt in zip(roots, roots[1:]):
+            sequential[prev].add(nxt)
 
-        in_deg: dict[Node, int] = defaultdict(int)
-        out_deg: dict[Node, int] = defaultdict(int)
+        # степени для раскраски
+        in_deg: dict[int, int] = defaultdict(int)
+        out_deg: dict[int, int] = defaultdict(int)
         for caller, callees in nested.items():
             out_deg[caller] += len(callees)
             for c in callees:
                 in_deg[c] += 1
-        for n in nodes_seen:
-            in_deg[n] += 0
-            out_deg[n] += 0
+        for cid in calls:
+            in_deg[cid] += 0
+            out_deg[cid] += 0
 
         nodes_payload = [
-            make_node(n, in_deg[n], out_deg[n], thread_id, thread_color)
-            for n in sorted(nodes_seen)
+            make_node(calls[cid], in_deg[cid], out_deg[cid], thread_color)
+            for cid in sorted(calls)
         ]
 
         edges_payload: list[dict] = []
-        for caller, callees in nested.items():
-            for callee in callees:
+
+        # nested: parent -> child
+        for caller_id, callees in nested.items():
+            caller = calls[caller_id]
+            for callee_id in callees:
+                callee = calls[callee_id]
                 edges_payload.append({
-                    "from": eid(caller),
-                    "to": eid(callee),
+                    "from": nid(caller),
+                    "to": nid(callee),
                     "arrows": "to",
                     "color": {"color": "#555555", "highlight": "#000000"},
                     "width": 1.5,
-                    "title": f"[вложенный] {caller[0]}.{caller[1]} "
-                             f"-> {callee[0]}.{callee[1]}",
+                    "title": (
+                        f"[вложенный] step {caller.step} -> step {callee.step}\n"
+                        f"{caller.class_name}.{caller.method_name}@{caller.call_id}"
+                        f" -> "
+                        f"{callee.class_name}.{callee.method_name}@{callee.call_id}"
+                    ),
                     "kind": "nested",
                 })
 
+        # sequential: между корневыми (если нет nested-дубля)
         if show_sequential:
-            for caller, callees in sequential.items():
-                for callee in callees:
-                    if callee in nested.get(caller, set()):
+            for caller_id, callees in sequential.items():
+                caller = calls[caller_id]
+                for callee_id in callees:
+                    if callee_id in nested.get(caller_id, set()):
                         continue
+                    callee = calls[callee_id]
                     edges_payload.append({
-                        "from": eid(caller),
-                        "to": eid(callee),
+                        "from": nid(caller),
+                        "to": nid(callee),
                         "arrows": "to",
                         "color": {"color": "#e6194b", "highlight": "#a00030"},
                         "width": 1.2,
                         "dashes": [6, 4],
-                        "title": f"[последовательный] {caller[0]}.{caller[1]} "
-                                 f"-> {callee[0]}.{callee[1]}",
+                        "title": (
+                            f"[последовательный] step {caller.step} -> step {callee.step}\n"
+                            f"{caller.class_name}.{caller.method_name}@{caller.call_id}"
+                            f" -> "
+                            f"{callee.class_name}.{callee.method_name}@{callee.call_id}"
+                        ),
                         "kind": "sequential",
                     })
 
@@ -227,14 +313,14 @@ def build_per_thread_data(
 
 
 # ============================================================
-# 2. ЗАГРУЗКА ДАННЫХ
+# 4. ЗАГРУЗКА ДАННЫХ
 # ============================================================
 
 def load_one_stack(json_path: Path) -> dict[str, list[dict]] | None:
     """
     Читает один JSON. Форматы:
       a) {thread_id: [events...]}
-      b) [events...]  → ключ = имя файла (stem)
+      b) [events...]  -> ключ = имя файла (stem)
     Возвращает None, если битый/пустой/не того формата.
     """
     try:
@@ -282,17 +368,21 @@ def _demo_or_fail(reason: str) -> dict[str, list[dict]] | None:
 
 
 # ============================================================
-# 3. РЕНДЕР ОДНОГО HTML
+# 5. РЕНДЕР ОДНОГО HTML
 # ============================================================
 
 def _render_one(events_by_thread: dict[str, list[dict]],
                 out_path: Path, *, title: str) -> None:
-    graph, seq_graph, _nt, _tc = build_call_graph(events_by_thread)
+    (graph, seq_graph, node_threads,
+     thread_calls, calls_by_thread) = build_call_graph(events_by_thread)
+
+    total_nodes = sum(len(c) for c in calls_by_thread.values())
+    total_nested = sum(len(v) for v in graph.values())
+    total_seq = sum(len(v) for v in seq_graph.values())
+
     log.info(
         "[%s] threads=%d nodes=%d nested=%d sequential=%d",
-        title, len(events_by_thread), len(graph),
-        sum(len(v) for v in graph.values()),
-        sum(len(v) for v in seq_graph.values()),
+        title, len(events_by_thread), total_nodes, total_nested, total_seq,
     )
 
     per_thread = build_per_thread_data(
@@ -314,7 +404,7 @@ def _render_one(events_by_thread: dict[str, list[dict]],
 
 
 # ============================================================
-# 4. ГЛАВНАЯ ФУНКЦИЯ (единственная точка входа наружу)
+# 6. ГЛАВНАЯ ФУНКЦИЯ
 # ============================================================
 
 def generate_flow_htmls(*, config_path: Path | None = None) -> Path | None:
@@ -324,7 +414,7 @@ def generate_flow_htmls(*, config_path: Path | None = None) -> Path | None:
 
     Вызывается:
       - лениво из AppContext при первом /flow-list;
-      - пакетно через `python build_graph.py`.
+      - пакетно через `python -m flow_graph.build_graph`.
     """
     # --- конфиг ---
     try:
@@ -420,7 +510,7 @@ def generate_flow_htmls(*, config_path: Path | None = None) -> Path | None:
 
 
 # ============================================================
-# 5. ПАКЕТНЫЙ РЕЖИМ
+# 7. ПАКЕТНЫЙ РЕЖИМ
 # ============================================================
 
 if __name__ == "__main__":
