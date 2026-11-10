@@ -17,11 +17,25 @@ from test_intersection.events_timeline import (
     make_row as make_event_row,
 )
 
+# ---------- constants ----------
+
+TEST_EVENT_TYPE = "org.junit.TestExecution"
+
 
 # ---------- helpers ----------
 
 def _lower(s) -> str:
     return (s or "").lower()
+
+
+def _is_test(e: JfrEvent) -> bool:
+    """Надёжнее, чем isinstance: не зависит от того, откуда импортирован TestCase."""
+    return getattr(e, "event_type", None) == TEST_EVENT_TYPE
+
+
+def _tests(ctx) -> list[TestCase]:
+    """Все тесты из all_events. Вычисляется на месте — без отдельного кэша в ctx."""
+    return [e for e in ctx.all_events if _is_test(e)]
 
 
 def _test_brief(tc: TestCase) -> dict:
@@ -77,32 +91,35 @@ def event_class(tc: JfrEvent) -> str:
 # ---------- endpoints ----------
 
 def _all_tests(ctx) -> list[dict]:
-    result = [_test_brief(tc) for tc in ctx.test_events]
+    result = [_test_brief(tc) for tc in _tests(ctx)]
     result.sort(key=lambda x: (x["class_name"], x["method_name"], x["name"]))
     return result
 
 
 def _search_tests(ctx, query: str) -> list[dict]:
+    tests = _tests(ctx)
     if (not query
             or ctx.global_min is None
             or ctx.global_max is None
-            or not ctx.test_events):
+            or not tests):
         return []
 
     axis_start = ts_to_ms(ctx.global_min)
     axis_end = ts_to_ms(ctx.global_max)
     ticks = make_ticks(axis_start, axis_end, n=10)
 
+    overlap = getattr(ctx, "overlap_dict", None) or {}
+
     result: list[dict] = []
     matched: set[str] = set()
 
-    for test, partners in ctx.overlap_dict.items():
-        if not isinstance(test, TestCase):
+    for test, partners in overlap.items():
+        if not _is_test(test):
             continue
         if not _test_matches(test, query):
             continue
         matched.add(test_key(test))
-        test_partners = [ov for ov in partners if isinstance(ov.other, TestCase)]
+        test_partners = [ov for ov in partners if _is_test(ov.other)]
         partners_json = [
             {**_test_brief(ov.other), "ms": ov.intersection_ms}
             for ov in test_partners
@@ -117,7 +134,7 @@ def _search_tests(ctx, query: str) -> list[dict]:
             "ticks": ticks,
         })
 
-    for tc in ctx.test_events:
+    for tc in tests:
         k = test_key(tc)
         if k in matched:
             continue
@@ -158,10 +175,14 @@ def _search_events(ctx, query: str) -> list[dict]:
     axis_end = ts_to_ms(ctx.global_max)
     ticks = make_ticks(axis_start, axis_end, n=10)
 
+    overlap = getattr(ctx, "overlap_dict", None) or {}
+
     result: list[dict] = []
     matched: set[str] = set()
 
-    for ev, partners in ctx.overlap_dict.items():
+    for ev, partners in overlap.items():
+        if _is_test(ev):          # тесты ищутся через _search_tests
+            continue
         if not _event_matches(ev, query):
             continue
         matched.add(event_key(ev))
@@ -180,6 +201,8 @@ def _search_events(ctx, query: str) -> list[dict]:
         })
 
     for ev in ctx.all_events:
+        if _is_test(ev):
+            continue
         k = event_key(ev)
         if k in matched:
             continue
@@ -226,7 +249,7 @@ def _threads_timeline(ctx) -> dict:
     span = max(axis_end - axis_start, 1.0)
 
     by_thread: dict[str, list] = defaultdict(list)
-    for ev in ctx.test_events:
+    for ev in _tests(ctx):                    # ← было ctx.test_events
         by_thread[ev.thread_name or "<unknown>"].append(ev)
 
     threads_data = []
@@ -268,18 +291,24 @@ def _mixed_timeline(ctx, test_keys: list[str], event_types: list[str]) -> dict:
         return {"rows": [], "axis_start": "", "axis_end": "", "ticks": []}
 
     wanted_types = set(event_types)
-    if not wanted_types:
+    wanted_keys = set(test_keys)
+    if not wanted_types and not wanted_keys:
         return {"rows": [], "axis_start": "", "axis_end": "", "ticks": []}
 
     axis_start = ts_to_ms(ctx.global_min)
     axis_end = ts_to_ms(ctx.global_max)
     ticks = make_ticks(axis_start, axis_end, n=10)
 
-    rows = [
-        make_event_row(ev, axis_start, axis_end)
-        for ev in ctx.all_events
-        if ev.event_type and ev.event_type in wanted_types
-    ]
+    rows = []
+    for ev in ctx.all_events:
+        # события выбранных типов
+        if ev.event_type and ev.event_type in wanted_types:
+            rows.append(make_event_row(ev, axis_start, axis_end))
+            continue
+        # выбранные тесты (по ключу)
+        if _is_test(ev) and test_key(ev) in wanted_keys:
+            rows.append(make_event_row(ev, axis_start, axis_end))
+
     rows.sort(key=lambda r: r["left"])
 
     return {
